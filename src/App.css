@@ -1,0 +1,523 @@
+/* ── Base ─────────────────────────────────────────────────── */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #f4f3ef;
+  color: #111;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+/* ── Header ───────────────────────────────────────────────── */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-bottom: 2px solid #111;
+  background: #f4f3ef;
+  flex-shrink: 0;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.header-brand {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.header-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: #111;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.header-sub {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #888;
+  text-transform: uppercase;
+}
+
+/* ── Option switch ────────────────────────────────────────── */
+
+.option-switch {
+  display: flex;
+  border: 1.5px solid #111;
+}
+
+.option-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 6px 16px;
+  background: transparent;
+  border: none;
+  border-right: 1.5px solid #111;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #111;
+  transition: background 0.12s;
+}
+
+.option-btn:last-child { border-right: none; }
+.option-btn:hover      { background: #e8e6e0; }
+.option-btn.active     { background: #111; color: #f4f3ef; }
+
+.stop-count {
+  font-size: 8px;
+  font-weight: 400;
+  opacity: 0.65;
+  letter-spacing: 0.04em;
+}
+
+/* ── Body (sidebar + wall) ───────────────────────────────── */
+
+.app-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Control Panel ────────────────────────────────────────── */
+
+.control-panel {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 2px solid #111;
+  background: #f4f3ef;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.control-panel::-webkit-scrollbar { width: 4px; }
+.control-panel::-webkit-scrollbar-thumb { background: #ccc; }
+
+.ctrl-section {
+  border-bottom: 1px solid #d8d6d0;
+  padding: 14px 16px;
+}
+
+.ctrl-title {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 10px;
+}
+
+/* mode buttons */
+.mode-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.mode-btn {
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid #bbb;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #444;
+  transition: all 0.1s;
+}
+
+.mode-btn:hover  { border-color: #111; color: #111; }
+.mode-btn.active { background: #111; color: #f4f3ef; border-color: #111; }
+
+.mode-hint {
+  font-size: 9px;
+  color: #999;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* motif picker */
+.ctrl-label {
+  font-size: 9px;
+  color: #888;
+  letter-spacing: 0.06em;
+  margin-bottom: 5px;
+}
+
+.motif-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 10px;
+}
+
+.motif-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: 1px solid #bbb;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #555;
+  transition: all 0.1s;
+}
+.motif-btn:hover  { border-color: #111; color: #111; }
+.motif-btn.active { background: #111; color: #f4f3ef; border-color: #111; }
+
+/* sliders */
+.slider-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  cursor: default;
+}
+
+.slider-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.slider-label {
+  font-size: 10px;
+  color: #444;
+  letter-spacing: 0.04em;
+}
+
+.slider-val {
+  font-size: 10px;
+  font-weight: 700;
+  color: #111;
+  min-width: 36px;
+  text-align: right;
+}
+
+.slider-row input[type='range'] {
+  width: 100%;
+  accent-color: #111;
+  cursor: pointer;
+  height: 2px;
+}
+
+.slider-hint {
+  font-size: 8px;
+  color: #aaa;
+  margin: -6px 0 10px;
+  line-height: 1.4;
+  letter-spacing: 0.02em;
+}
+
+/* ── Location cards ───────────────────────────────────────── */
+
+.loc-card {
+  border: 1px solid #e0dfd9;
+  padding: 8px 10px;
+  margin-bottom: 5px;
+  background: white;
+  transition: border-color 0.12s, opacity 0.12s;
+}
+
+.loc-card.inactive  { opacity: 0.45; background: #fafaf8; }
+.loc-card.active    { opacity: 1; }
+.loc-card.has-img   { border-color: #111; }
+
+.loc-card-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.loc-toggle {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1.5px solid #bbb;
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+  color: #666;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.1s;
+}
+.loc-toggle.on  { border-color: #111; color: #111; }
+.loc-toggle.off { border-color: #ccc; color: #ccc; }
+.loc-toggle:hover { border-color: #111; color: #111; }
+
+.loc-info       { flex: 1; min-width: 0; }
+.loc-name       { font-size: 10px; font-weight: 700; letter-spacing: 0.07em; color: #111; }
+.loc-sub        { font-size: 8px; color: #888; }
+
+.loc-coords {
+  font-size: 8px;
+  color: #bbb;
+  text-align: right;
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.loc-derived {
+  display: flex;
+  gap: 8px;
+  font-size: 8px;
+  color: #bbb;
+  margin: 5px 0 4px 30px;
+  letter-spacing: 0.03em;
+}
+
+.loc-width-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 5px 0 2px 30px;
+}
+
+.loc-width-label {
+  font-size: 8px;
+  color: #aaa;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+  width: 28px;
+}
+
+.loc-width-val {
+  font-size: 8px;
+  font-weight: 700;
+  color: #555;
+  flex-shrink: 0;
+  min-width: 32px;
+  text-align: right;
+}
+
+.loc-width-row input[type='range'] {
+  flex: 1;
+  accent-color: #111;
+  cursor: pointer;
+  height: 2px;
+}
+
+.loc-upload-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  margin-left: 30px;
+}
+
+.loc-upload-label {
+  font-size: 7px;
+  color: #bbb;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+  width: 36px;
+}
+
+.loc-section-title {
+  font-size: 7px;
+  font-weight: 700;
+  color: #bbb;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin: 7px 0 3px 30px;
+}
+
+.upload-btn {
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border: 1px solid #bbb;
+  background: transparent;
+  color: #777;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: all 0.1s;
+  user-select: none;
+}
+.upload-btn:hover  { border-color: #111; color: #111; }
+.upload-btn.active { border-color: #111; background: #111; color: #f4f3ef; }
+
+.clear-btn {
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  color: #aaa;
+  transition: all 0.1s;
+}
+.clear-btn:hover { border-color: #c00; color: #c00; }
+
+.loc-preview-thumb {
+  width: 24px;
+  height: 24px;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.5);
+  border: 1px solid #ddd;
+}
+
+/* ── Preset label ─────────────────────────────────────────── */
+.preset-label {
+  font-size: 9px;
+  color: #888;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+
+.ctrl-count {
+  font-size: 9px;
+  font-weight: 400;
+  color: #aaa;
+  letter-spacing: 0;
+}
+
+/* export button in panel */
+.export-btn-panel {
+  width: 100%;
+  padding: 10px;
+  background: #111;
+  color: #f4f3ef;
+  border: none;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.export-btn-panel:hover { background: #333; }
+
+.session-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.session-btn {
+  padding: 7px 4px;
+  background: transparent;
+  border: 1px solid #555;
+  color: #888;
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.1s;
+  user-select: none;
+}
+.session-btn:hover { border-color: #111; color: #111; }
+
+/* ── Main wall area ───────────────────────────────────────── */
+
+.app-main {
+  flex: 1;
+  overflow: auto;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wall-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portions-btn {
+  padding: 5px 12px;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1.5px solid #bbb;
+  color: #888;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.portions-btn:hover  { border-color: #111; color: #111; }
+.portions-btn.active { background: #111; color: #f4f3ef; border-color: #111; }
+
+.wall-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wall-scroll {
+  overflow-x: auto;
+  border: 1px solid #ccc;
+  background: white;
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+.wall-scroll::-webkit-scrollbar       { height: 5px; }
+.wall-scroll::-webkit-scrollbar-track { background: #eee; }
+.wall-scroll::-webkit-scrollbar-thumb { background: #bbb; }
+
+.wall-footer {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.export-btn {
+  padding: 7px 16px;
+  background: #111;
+  color: #f4f3ef;
+  border: none;
+  font-family: inherit;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+
+.export-btn:hover { background: #333; }
+
+.wall-note {
+  font-size: 9px;
+  color: #aaa;
+  letter-spacing: 0.04em;
+}
