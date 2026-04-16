@@ -112,7 +112,7 @@ const MOTIF_FNS = {
   all:     isAllVoid,
 };
 
-export function buildTatreezPaths(loc, treeX, treeW, bandH, cs, depthMult = 1, motifType = 'diamond', motifScale = 3) {
+export function buildTatreezPaths(loc, treeX, treeW, bandH, cs, depthMult = 1, motifType = 'diamond', motifScale = 3, treeStyle = 'data') {
   const p = silhouetteParams(loc.lat, loc.lon);
 
   const silRatio = (t) => {
@@ -137,35 +137,72 @@ export function buildTatreezPaths(loc, treeX, treeW, bandH, cs, depthMult = 1, m
   const taperRows  = Math.max(1, Math.round(p.amplitude * rows * 1.8));
   // ──────────────────────────────────────────────────────────
 
+  // ── Branch bottom boundary — same data as top silhouette ────────────────
+  // frRatio = how far down the top silhouette sits for each column (0=peak, 1=valley).
+  // Peak columns (trunk/main branches) → large lastRow (go deep).
+  // Valley columns (branch tips) → small lastRow (stop early).
+  // The same lat/lon wave that shapes the canopy top also shapes the branch bottoms,
+  // so the branching pattern is a direct data representation of each location.
+  //
+  // The center column is always the TRUNK — it always reaches the very bottom,
+  // making it unambiguous which line is the trunk of the tree.
+  const trunkCol = Math.round((cols - 1) / 2);
+  const lastRow = Array.from({ length: cols }, (_, ci) => {
+    if (ci === trunkCol) return rows; // trunk always reaches the bottom
+
+    if (treeStyle === 'tree') {
+      // ── Tree silhouette style ────────────────────────────────────────────
+      // Branches taper outward from the trunk — center goes deepest, edges
+      // shortest — always producing a recognisable tree profile.
+      // Lat/lon data still modulates the shape:
+      //   latitude  (amplitude) → how sharply branches taper (south = wider crown)
+      //   longitude (numPeaks)  → wave undulations along the gradient = side-branch groupings
+      const distFrac  = Math.abs(ci - trunkCol) / Math.max(1, cols / 2); // 0=trunk, 1=edge
+      const undulation = 0.12 * Math.sin(distFrac * Math.PI * p.numPeaks * 0.45);
+      const taper      = Math.pow(distFrac, 0.75 + p.amplitude * 1.2);
+      const botRatio   = (1 - taper * (0.68 + depthMult * 0.18)) + undulation;
+      return Math.max(firstRow[ci] + 1, Math.floor(rows * Math.max(0.12, botRatio)));
+    }
+
+    // ── Data style (default) ─────────────────────────────────────────────
+    const frRatio  = firstRow[ci] / rows;
+    const botRatio = 1 - frRatio * frRatio * depthMult * p.amplitude * 4.5;
+    return Math.max(firstRow[ci] + 1, Math.floor(rows * Math.max(0.15, botRatio)));
+  });
+  // ──────────────────────────────────────────────────────────────────────────
+
   const voidFn = MOTIF_FNS[motifType] ?? MOTIF_FNS.diamond;
   const S      = Math.max(1, motifScale);
   const gap    = cs * 0.08;
 
-  let stitchPath = '';
-  let edgePath   = '';
+  let stitchThin     = '';
+  let stitchMid      = '';
+  let stitchThick    = '';
+  let trunkPath      = ''; // center trunk — rendered thicker in PatternWall
+  let edgePath       = '';
+  let tipPath        = ''; // round-cap bud dots at the bottom tip of each branch
+  let voidClearPath  = ''; // full-height white segments that erase background in void cells
 
   for (let ci = 0; ci < cols; ci++) {
-    // Longitude: skip columns to encode density
-    if (ci % skipPeriod === skipPeriod - 1) continue;
+    if (ci !== trunkCol && ci % skipPeriod === skipPeriod - 1) continue;
 
     const cx = treeX + ci * cs + cs / 2;
     const fr = firstRow[ci];
-    const filledRows = rows - fr;
+    const lr = lastRow[ci];
+    if (lr <= fr) continue;
+    const filledRows = lr - fr;
 
-    for (let ri = fr; ri < rows; ri++) {
+    for (let ri = fr; ri < lr; ri++) {
       const depthInFill = ri - fr;
 
-      // Silhouette edge accent
       if (ri === fr) {
         const mid = ri * cs + cs / 2;
         edgePath += `M${cx.toFixed(1)},${mid.toFixed(1)}L${cx.toFixed(1)},${(ri * cs + cs - gap).toFixed(1)}`;
         continue;
       }
 
-      // Motif void: skip cell if it belongs to the ornamental empty pattern
       if (voidFn(ci, ri, S)) continue;
 
-      // Latitude: taper shortens segments near the silhouette edge
       const taperFrac = filledRows > 1 ? Math.min(1, depthInFill / taperRows) : 1;
       const fullY1 = ri * cs + gap;
       const fullY2 = (ri + 1) * cs - gap;
@@ -175,11 +212,47 @@ export function buildTatreezPaths(loc, treeX, treeW, bandH, cs, depthMult = 1, m
 
       if (y2 - y1 < 0.5) continue;
 
-      stitchPath += `M${cx.toFixed(1)},${y1.toFixed(1)}L${cx.toFixed(1)},${y2.toFixed(1)}`;
+      const seg = `M${cx.toFixed(1)},${y1.toFixed(1)}L${cx.toFixed(1)},${y2.toFixed(1)}`;
+      if (ci === trunkCol)             trunkPath  += seg;
+      else if (taperFrac <= 0.33)      stitchThin  += seg;
+      else if (taperFrac <= 0.66)      stitchMid   += seg;
+      else                             stitchThick += seg;
     }
   }
 
-  return { stitchPath, edgePath };
+  // ── Branch tip dots — bud at the bottom end of each terminating branch ──
+  // Only for columns that stop before the bottom (lastRow < rows). The trunk
+  // and any column that reaches the floor don't get a tip.
+  for (let ci = 0; ci < cols; ci++) {
+    if (ci !== trunkCol && ci % skipPeriod === skipPeriod - 1) continue;
+    if (ci === trunkCol) continue;
+    const fr = firstRow[ci];
+    const lr = lastRow[ci];
+    if (lr >= rows || lr <= fr) continue;
+    const cx   = treeX + ci * cs + cs / 2;
+    const tipY = lr * cs;
+    // Short downward stub — round caps turn the endpoints into dots
+    tipPath += `M${cx.toFixed(1)},${tipY.toFixed(1)}L${cx.toFixed(1)},${(tipY + cs * 0.28).toFixed(1)}`;
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // ── Void erase — all columns including skipped ones ──────────────────────
+  // skipPeriod drops some columns from rendering, but we still need to erase
+  // the background moiré in their void cells so the motif reads as solid white.
+  for (let ci = 0; ci < cols; ci++) {
+    const fr = firstRow[ci];
+    const lr = lastRow[ci];
+    if (lr <= fr) continue;
+    const cx = treeX + ci * cs + cs / 2;
+    for (let ri = fr + 1; ri < lr; ri++) {
+      if (voidFn(ci, ri, S)) {
+        voidClearPath += `M${cx.toFixed(1)},${(ri * cs).toFixed(1)}L${cx.toFixed(1)},${((ri + 1) * cs).toFixed(1)}`;
+      }
+    }
+  }
+  // ─────────────────────────────────────────────────────────────────────────
+
+  return { stitchThin, stitchMid, stitchThick, trunkPath, edgePath, tipPath, voidClearPath };
 }
 
 export function buildSectionTreeClip(loc, treeX, treeW, bandH, lineSpacing, depthMult = 1) {

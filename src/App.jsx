@@ -19,6 +19,9 @@ const DEFAULT_PARAMS = {
   motifType:       'diamond',
   motifScale:      3,
   imageLineWeight: 2.5,
+  treeStyle:       'data',  // 'data' | 'tree'
+  horizWeight:     1.0,    // horizontal grid line weight as fraction of lineWidth (0 = off)
+  horizHeight:     0.25,   // fraction of band height from bottom that shows horizontal lines
 };
 
 export default function App() {
@@ -32,7 +35,10 @@ export default function App() {
 
   // PatternWall registers its doExport here so ControlPanel can trigger it
   const exportRef = useRef(null);
-  const handleExport = () => exportRef.current?.();
+  const handleExportAllSvg      = ()   => exportRef.current?.exportAllSvg?.();
+  const handleExportAllJpeg     = ()   => exportRef.current?.exportAllJpeg?.();
+  const handleExportSectionSvg  = (id) => exportRef.current?.exportSectionSvg?.(id);
+  const handleExportSectionJpeg = (id) => exportRef.current?.exportSectionJpeg?.(id);
 
   const handleOptionChange = (opt) => {
     setOption(opt);
@@ -118,8 +124,11 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-brand">
-          <span className="header-title">ASWAN</span>
-          <span className="header-sub">Tree of Life — Nizari Ismaili Patternwork</span>
+          <div className="header-brand-top">
+            <span className="header-title">ASWAN</span>
+            <span className="header-sub">Tree of Life — Nizari Ismaili Patternwork</span>
+          </div>
+          <span className="header-desc">Each country's coordinates are encoded as pattern — longitude sets line density and branch rhythm, latitude sets moiré angle and tree silhouette — together a displacement map for stone carving.</span>
         </div>
         <div className="header-right">
           <span className="preset-label">Presets</span>
@@ -139,7 +148,10 @@ export default function App() {
           onUpload={handleUpload}
           onSectionWidth={handleSectionWidth}
           onTreeWidth={handleTreeWidth}
-          onExport={handleExport}
+          onExportAllSvg={handleExportAllSvg}
+          onExportAllJpeg={handleExportAllJpeg}
+          onExportSectionSvg={handleExportSectionSvg}
+          onExportSectionJpeg={handleExportSectionJpeg}
           onSaveSession={handleSaveSession}
           onLoadSession={handleLoadSession}
         />

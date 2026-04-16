@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { LOCATIONS, GEO_ORDER } from '../data/locations';
 import { ditherImageFile, grayscaleImageFile, applyThreshold } from '../patterns/dither';
 import { coordsToSectionParams } from '../patterns/moire';
@@ -66,6 +67,7 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
 
   const handleFileMoireA = makeMoireHandler('grayA', 'previewA');
   const handleFileMoireB = makeMoireHandler('grayB', 'previewB');
+  const handleFileMoireC = makeMoireHandler('grayC', 'previewC');
 
   const hasZones = !!(data?.crownGrid || data?.branchGrid || data?.rootGrid);
   return (
@@ -258,6 +260,28 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
               <span className="loc-width-val">{((data?.contrastB ?? 1.0)).toFixed(1)}×</span>
             </div>
           </>)}
+
+          {/* Layer C (embroidery erase) */}
+          <div className="loc-upload-row">
+            <span className="loc-upload-label">C erase</span>
+            <label className={`upload-btn ${data?.grayC ? 'active' : ''}`}>
+              {data?.grayC ? '✓' : '+'}
+              <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileMoireC} />
+            </label>
+            {data?.grayC && (
+              <button className="clear-btn" onClick={() => onUpload(locId, { grayC: null, previewC: null })}>×</button>
+            )}
+            {data?.previewC && <img src={data.previewC} className="loc-preview-thumb" alt="" />}
+          </div>
+          {data?.grayC && (
+            <div className="loc-width-row">
+              <span className="loc-width-label">Thresh</span>
+              <input type="range" min={5} max={99} step={1}
+                     value={Math.round((data?.thresholdC ?? 0.5) * 100)}
+                     onChange={e => onUpload(locId, { thresholdC: Number(e.target.value) / 100 })} />
+              <span className="loc-width-val">{Math.round((data?.thresholdC ?? 0.5) * 100)}%</span>
+            </div>
+          )}
         </>
       )}
     </div>
@@ -268,10 +292,12 @@ export default function ControlPanel({
   params, onChange,
   activeLocations, locationData,
   sectionWidths, treeWidths,
-  onToggle, onUpload, onSectionWidth, onTreeWidth, onExport,
+  onToggle, onUpload, onSectionWidth, onTreeWidth,
+  onExportAllSvg, onExportAllJpeg, onExportSectionSvg, onExportSectionJpeg,
   onSaveSession, onLoadSession,
 }) {
   const set = (key, val) => onChange({ ...params, [key]: val });
+  const [showInfo, setShowInfo] = useState(false);
 
   const bandWidth = (() => {
     const a = Math.abs(params.moireAngle) * Math.PI / 180;
@@ -280,6 +306,70 @@ export default function ControlPanel({
 
   return (
     <aside className="control-panel">
+
+      {/* ── Info panel ── */}
+      <section className="ctrl-section info-section">
+        <button className="info-toggle" onClick={() => setShowInfo(v => !v)}>
+          {showInfo ? '× close' : '? how to use'}
+        </button>
+        {showInfo && (
+          <div className="info-body">
+            <div className="info-block">
+              <div className="info-heading">What this is</div>
+              <p>A moiré interference pattern generator for stone carving. Each country section encodes its geographic coordinates directly into the pattern — the output SVG is a displacement map for Rhino.</p>
+            </div>
+
+            <div className="info-block">
+              <div className="info-heading">Pattern layers</div>
+              <dl>
+                <dt>A — Vertical</dt>
+                <dd>Base vertical lines. Upload an image to replace with a grayscale density map — dark pixels become thicker lines.</dd>
+                <dt>B — Angle</dt>
+                <dd>Second layer rotated by the overlay angle. Interference with A creates moiré bands. Upload an image for a data-driven angled layer.</dd>
+                <dt>C — Erase</dt>
+                <dd>Embroidery mask. Dark pixels in this image cut through all layers as white — the image shape appears as clean negative space across the full section.</dd>
+                <dt>Horiz Lines</dt>
+                <dd>Horizontal grid at the bottom of the band. Weight and height adjustable — integrates with the moiré frequency.</dd>
+              </dl>
+            </div>
+
+            <div className="info-block">
+              <div className="info-heading">Tree of Life zone</div>
+              <p>The centre column of each section. The silhouette profile, branch depth, and column density all derive from latitude and longitude.</p>
+              <dl>
+                <dt>Branch style: data</dt>
+                <dd>Branch depths follow the same lat/lon wave as the top silhouette — pure coordinate encoding.</dd>
+                <dt>Branch style: tree</dt>
+                <dd>Branches always taper outward from the trunk — latitude controls taper steepness, longitude adds undulating side-branch groupings.</dd>
+                <dt>Motif</dt>
+                <dd>Ornamental void pattern (diamond / chevron / star / all) cut into the filled zone as white negative space.</dd>
+                <dt>Crown / Branch / Root</dt>
+                <dd>Upload three images to map into the tree zone's top, middle, and bottom thirds. Threshold and symmetry mirror are adjustable per location.</dd>
+              </dl>
+            </div>
+
+            <div className="info-block">
+              <div className="info-heading">Coordinate encoding</div>
+              <dl>
+                <dt>Longitude →</dt>
+                <dd>Line spacing (frequency), branch column density, horizontal line spacing.</dd>
+                <dt>Latitude →</dt>
+                <dd>Moiré overlay angle, tree silhouette amplitude and peak count, branch taper depth.</dd>
+              </dl>
+            </div>
+
+            <div className="info-block">
+              <div className="info-heading">Export</div>
+              <dl>
+                <dt>All SVG / All JPG</dt>
+                <dd>Full wall including input image thumbnails at the bottom.</dd>
+                <dt>Per-country SVG / JPG</dt>
+                <dd>Each section cropped individually. JPEG is 2× resolution for print quality.</dd>
+              </dl>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* ── Mode ── */}
       <section className="ctrl-section">
@@ -320,6 +410,16 @@ export default function ControlPanel({
                 min={0.5} max={8} step={0.5} unit="px"
                 onChange={v => set('lineWidth', v)}
                 hint="Thicker = deeper carve in Rhino displacement" />
+
+        <Slider label="Horiz Lines" value={params.horizWeight}
+                min={0} max={1} step={0.05} unit="×"
+                onChange={v => set('horizWeight', v)}
+                hint="Horizontal grid weight — 0 = off, shares vertical frequency per section" />
+
+        <Slider label="Horiz Height" value={params.horizHeight}
+                min={0.05} max={1} step={0.05} unit="×"
+                onChange={v => set('horizHeight', v)}
+                hint="How much of the bottom the horizontal lines fill" />
       </section>
 
       <section className="ctrl-section">
@@ -365,6 +465,18 @@ export default function ControlPanel({
       <section className="ctrl-section">
         <div className="ctrl-title">Tree of Life</div>
 
+        <div className="ctrl-label">Branch style</div>
+        <div className="motif-btns">
+          <button
+            className={`motif-btn ${params.treeStyle === 'data' ? 'active' : ''}`}
+            onClick={() => set('treeStyle', 'data')}
+          >data</button>
+          <button
+            className={`motif-btn ${params.treeStyle === 'tree' ? 'active' : ''}`}
+            onClick={() => set('treeStyle', 'tree')}
+          >tree</button>
+        </div>
+
         <Slider label="Tree Depth" value={params.treeDepth}
                 min={0} max={3} step={0.05} unit="×"
                 onChange={v => set('treeDepth', v)}
@@ -394,10 +506,10 @@ export default function ControlPanel({
       {/* ── Image input ── */}
       <section className="ctrl-section">
         <div className="ctrl-title">Image Input</div>
-        <Slider label="Image Line Weight" value={params.imageLineWeight}
-                min={0.5} max={8} step={0.5} unit="px"
+        <Slider label="Image Resolution" value={params.imageLineWeight}
+                min={0.5} max={8} step={0.5} unit="×"
                 onChange={v => set('imageLineWeight', v)}
-                hint="Stroke weight of image-derived line segments" />
+                hint="Higher = coarser grid = more recognisable shape; lower = finer detail" />
       </section>
 
       {/* ── Location stops ── */}
@@ -428,8 +540,27 @@ export default function ControlPanel({
 
       {/* ── Export / Session ── */}
       <section className="ctrl-section">
-        <button className="export-btn-panel" onClick={onExport}>Export SVG</button>
+        <div className="ctrl-title">Export</div>
+
         <div className="session-row">
+          <button className="export-btn-panel" onClick={onExportAllSvg}>All SVG</button>
+          <button className="export-btn-panel" onClick={onExportAllJpeg}>All JPG</button>
+        </div>
+
+        <div className="export-section-list">
+          {activeLocations.map(id => {
+            const loc = LOCATIONS[id];
+            return (
+              <div key={id} className="export-loc-row">
+                <span className="export-loc-name">{loc.name}</span>
+                <button className="session-btn" onClick={() => onExportSectionSvg(id)}>SVG</button>
+                <button className="session-btn" onClick={() => onExportSectionJpeg(id)}>JPG</button>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="session-row" style={{ marginTop: 10 }}>
           <button className="session-btn" onClick={onSaveSession}>Save session</button>
           <label className="session-btn">
             Load session

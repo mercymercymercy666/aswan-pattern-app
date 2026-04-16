@@ -3,13 +3,25 @@ import { LOCATIONS } from '../data/locations';
 import { coordsToSectionParams, buildTatreezPaths } from '../patterns/moire';
 import { assembleTatreezGrid, hasZoneImages } from '../patterns/tatreez';
 
-const LABEL_H = 80;
+const LABEL_H  = 80;
+const INFO_IMG  = 90; // thumbnail size (px)
+const INFO_GAP  = 8;  // gap between thumbnails
+const INFO_H    = INFO_IMG + 24; // thumbnail + label text + padding
 
 /* ── Vertical line pattern ───────────────────────────────── */
 function VertPat({ id, freq, lw }) {
   return (
     <pattern id={id} width={freq} height={freq} patternUnits="userSpaceOnUse">
       <line x1={0} y1={0} x2={0} y2={freq} stroke="black" strokeWidth={lw} />
+    </pattern>
+  );
+}
+
+/* ── Horizontal line pattern ─────────────────────────────── */
+function HorizPat({ id, freq, lw }) {
+  return (
+    <pattern id={id} width={freq} height={freq} patternUnits="userSpaceOnUse">
+      <line x1={0} y1={0} x2={freq} y2={0} stroke="black" strokeWidth={lw} />
     </pattern>
   );
 }
@@ -76,6 +88,33 @@ function GrayLineLayer({ grayGrid, drawX0, drawW, bandH, lineSpacing, baseWidth,
 }
 
 
+/* ── Embroidery erase layer ─────────────────────────────── */
+// Dark pixels in grayC → white vertical lines at full lineSpacing width → completely
+// erases the underlying pattern in those cells, leaving clean white negative space.
+function EraseLineLayer({ grayGrid, x0, secW, bandH, lineSpacing, threshold }) {
+  const ROWS    = grayGrid.length;
+  const COLS    = grayGrid[0]?.length || ROWS;
+  const numCols = Math.ceil(secW / lineSpacing);
+  const cellH   = bandH / ROWS;
+  let d = '';
+  for (let col = 0; col < numCols; col++) {
+    const sx     = x0 + col * lineSpacing;
+    const t      = Math.max(0, Math.min(1, (sx - x0) / secW));
+    const imgCol = Math.min(COLS - 1, Math.floor(t * COLS));
+    for (let row = 0; row < ROWS; row++) {
+      if (grayGrid[row][imgCol] > threshold) continue;
+      const sy = row * cellH;
+      d += `M${sx.toFixed(1)},${sy.toFixed(1)}L${sx.toFixed(1)},${(sy + cellH).toFixed(1)}`;
+    }
+  }
+  if (!d) return null;
+  return (
+    <path d={d} stroke="white"
+          strokeWidth={lineSpacing * 1.15}
+          strokeLinecap="butt" fill="none" />
+  );
+}
+
 /* ── Assembled tatreez zone grid → vertical line segments ── */
 function GridLineLayer({ grid, treeX, cs, lineWidth }) {
   const rows = grid.length;
@@ -96,13 +135,70 @@ function GridLineLayer({ grid, treeX, cs, lineWidth }) {
   return <path d={d} stroke="black" strokeWidth={lineWidth} strokeLinecap="butt" fill="none" />;
 }
 
+/* ── Export helpers ─────────────────────────────────────── */
+async function blobToDataUrl(blobUrl) {
+  const res  = await fetch(blobUrl);
+  const blob = await res.blob();
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function svgToCanvas(svgEl, x0, w, h, scale = 2) {
+  const clone = svgEl.cloneNode(true);
+  clone.querySelectorAll('[data-noexport]').forEach(el => el.remove());
+  clone.setAttribute('viewBox', `${x0} 0 ${w} ${h}`);
+  clone.setAttribute('width',  w);
+  clone.setAttribute('height', h);
+  // Inline blob: hrefs as base64 so they survive SVG→canvas serialisation
+  await Promise.all(Array.from(clone.querySelectorAll('image[href]')).map(async img => {
+    const href = img.getAttribute('href') ?? '';
+    if (href.startsWith('blob:')) {
+      try { img.setAttribute('href', await blobToDataUrl(href)); } catch {}
+    }
+  }));
+  const str  = new XMLSerializer().serializeToString(clone);
+  const url  = URL.createObjectURL(new Blob([str], { type: 'image/svg+xml' }));
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => {
+      const canvas  = document.createElement('canvas');
+      canvas.width  = Math.round(w * scale);
+      canvas.height = Math.round(h * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas);
+    };
+    image.onerror = reject;
+    image.src = url;
+  });
+}
+
+function triggerDownload(blob, filename) {
+  const a   = document.createElement('a');
+  a.href    = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
 /* ── Main wall ───────────────────────────────────────────── */
 export default function PatternWall({
-  activeLocations, params, locationData, sectionWidths, treeWidths, showPortions, exportRef,
+  activeLocations, params, locationData, sectionWidths, treeWidths, exportRef,
 }) {
   const svgRef  = useRef(null);
   const BAND_H  = params.wallHeight;
-  const TOTAL_H = BAND_H + LABEL_H;
+
+  const hasAnyImages = activeLocations.some((id) => {
+    const d = locationData[id];
+    return d?.previewA || d?.previewB || d?.previewC || d?.previewCrown || d?.previewBranch || d?.previewRoot;
+  });
+  const TOTAL_H = BAND_H + LABEL_H + (hasAnyImages ? INFO_H : 0);
 
   const sections = useMemo(() => {
     let cursor = 0;
@@ -120,18 +216,53 @@ export default function PatternWall({
 
   const totalW = sections.reduce((s, sec) => s + sec.secW, 0);
 
-  const handleExport = () => {
+  // ── All SVG ───────────────────────────────────────────────
+  const handleExportAllSvg = () => {
     if (!svgRef.current) return;
     const clone = svgRef.current.cloneNode(true);
     clone.querySelectorAll('[data-noexport]').forEach(el => el.remove());
-    const str  = new XMLSerializer().serializeToString(clone);
-    const blob = new Blob([str], { type: 'image/svg+xml' });
-    const a    = document.createElement('a');
-    a.href     = URL.createObjectURL(blob);
-    a.download = `aswan-wall-${sections.length}stops.svg`;
-    a.click();
+    triggerDownload(
+      new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }),
+      `aswan-wall-${sections.length}stops.svg`,
+    );
   };
-  if (exportRef) exportRef.current = handleExport;
+
+  // ── All JPG ───────────────────────────────────────────────
+  const handleExportAllJpeg = async () => {
+    if (!svgRef.current) return;
+    const canvas = await svgToCanvas(svgRef.current, 0, totalW, TOTAL_H);
+    canvas.toBlob(b => triggerDownload(b, `aswan-wall-${sections.length}stops.jpg`), 'image/jpeg', 0.95);
+  };
+
+  // ── Per-section SVG ───────────────────────────────────────
+  const handleExportSectionSvg = (id) => {
+    const sec = sections.find(s => s.id === id);
+    if (!sec || !svgRef.current) return;
+    const clone = svgRef.current.cloneNode(true);
+    clone.querySelectorAll('[data-noexport]').forEach(el => el.remove());
+    clone.setAttribute('viewBox', `${sec.x0} 0 ${sec.secW} ${TOTAL_H}`);
+    clone.setAttribute('width',  sec.secW);
+    clone.setAttribute('height', TOTAL_H);
+    triggerDownload(
+      new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }),
+      `aswan-${id}.svg`,
+    );
+  };
+
+  // ── Per-section JPG ───────────────────────────────────────
+  const handleExportSectionJpeg = async (id) => {
+    const sec = sections.find(s => s.id === id);
+    if (!sec || !svgRef.current) return;
+    const canvas = await svgToCanvas(svgRef.current, sec.x0, sec.secW, TOTAL_H);
+    canvas.toBlob(b => triggerDownload(b, `aswan-${id}.jpg`), 'image/jpeg', 0.95);
+  };
+
+  if (exportRef) exportRef.current = {
+    exportAllSvg:      handleExportAllSvg,
+    exportAllJpeg:     handleExportAllJpeg,
+    exportSectionSvg:  handleExportSectionSvg,
+    exportSectionJpeg: handleExportSectionJpeg,
+  };
 
   return (
     <div className="wall-wrap">
@@ -145,10 +276,13 @@ export default function PatternWall({
           <defs>
             {sections.map(({ id, sp }, idx) => (
               <g key={`defs-${id}-${idx}`}>
-                {/* Base vertical pattern (used when no image A) */}
-                <VertPat id={`v-${idx}`} freq={sp.freq} lw={sp.lineWidth} />
-                {/* Angled overlay (used when no image B) */}
-                <AnglePat id={`a-${idx}`} angle={sp.angle} freq={sp.freq} lw={sp.lineWidth} />
+                <VertPat  id={`v-${idx}`}  freq={sp.freq} lw={sp.lineWidth} />
+                <AnglePat id={`a-${idx}`}  angle={sp.angle} freq={sp.freq} lw={sp.lineWidth} />
+                {/* Thin variants for inside the tree zone */}
+                <VertPat  id={`vt-${idx}`} freq={sp.freq} lw={sp.lineWidth * 0.6} />
+                <AnglePat id={`at-${idx}`} angle={sp.angle} freq={sp.freq} lw={sp.lineWidth * 0.6} />
+                {/* Horizontal grid — same freq as vertical (longitude-driven) */}
+                <HorizPat id={`hh-${idx}`} freq={sp.freq} lw={sp.lineWidth * params.horizWeight} />
               </g>
             ))}
             {/* Section-bounds clip (for image-driven angled layer) */}
@@ -169,8 +303,8 @@ export default function PatternWall({
           <rect x={0} y={0} width={totalW} height={BAND_H} fill="white" />
 
           {/* ── Layer 1: vertical lines — full section ── */}
-          {/* Uniform pattern, or image A with darkness → stroke width */}
-          {sections.map(({ id, x0, secW, sp }, idx) => {
+          {/* Side bands: full weight. Tree zone: same pattern, thinner lines. */}
+          {sections.map(({ id, x0, secW, treeX, treeW, sp }, idx) => {
             const d     = locationData[id];
             const grayA = d?.grayA;
             if (grayA) {
@@ -183,117 +317,127 @@ export default function PatternWall({
                   contrast={d?.contrastA   ?? 1.0} />
               );
             }
+            const lx = treeX, rw = x0 + secW - treeX - treeW;
             return (
-              <rect key={`vert-${id}-${idx}`}
-                    x={x0} y={0} width={secW} height={BAND_H}
-                    fill={`url(#v-${idx})`} />
+              <g key={`vert-${id}-${idx}`}>
+                <rect x={x0}          y={0} width={Math.max(0, lx - x0)} height={BAND_H} fill={`url(#v-${idx})`} />
+                <rect x={lx}          y={0} width={treeW}                 height={BAND_H} fill={`url(#vt-${idx})`} />
+                <rect x={lx + treeW}  y={0} width={Math.max(0, rw)}       height={BAND_H} fill={`url(#v-${idx})`} />
+              </g>
             );
           })}
 
           {/* ── Layer 2: angled overlay — full section ── */}
-          {sections.map(({ id, x0, secW, sp }, idx) => {
+          {/* Same side-band / tree-zone split as Layer 1 */}
+          {sections.map(({ id, x0, secW, treeX, treeW, sp }, idx) => {
             const d     = locationData[id];
             const grayB = d?.grayB;
             if (grayB) {
               const angleRad = Math.abs(sp.angle * Math.PI / 180);
-              const pad = Math.ceil((BAND_H / 2) * Math.sin(angleRad) + (secW / 2) * Math.abs(1 - Math.cos(angleRad)));
-              const cx  = x0 + secW / 2;
-              const cy  = BAND_H / 2;
+              // xPad: how far lines must extend left/right so rotated corners are covered
+              const xPad = Math.ceil((BAND_H / 2) * Math.sin(angleRad)) + 20;
+              // yPad: rotated corners also need lines beyond top/bottom of the band
+              const yPad = Math.ceil((secW  / 2) * Math.sin(angleRad)) + 20;
+              const cx   = x0 + secW / 2;
+              const cy   = BAND_H / 2;
               return (
                 <g key={`moire-${id}-${idx}`} clipPath={`url(#secClip-${idx})`}>
                   <g transform={`rotate(${sp.angle} ${cx} ${cy})`}>
-                    <GrayLineLayer
-                      grayGrid={grayB} drawX0={x0 - pad} drawW={secW + 2 * pad} bandH={BAND_H}
-                      lineSpacing={sp.freq} baseWidth={sp.lineWidth}
-                      imgX0={x0} imgW={secW}
-                      threshold={d?.thresholdB ?? 0.82}
-                      contrast={d?.contrastB   ?? 1.0} />
+                    {/* translate up by yPad so drawing covers [−yPad … BAND_H+yPad] */}
+                    <g transform={`translate(0, ${-yPad})`}>
+                      <GrayLineLayer
+                        grayGrid={grayB} drawX0={x0 - xPad} drawW={secW + 2 * xPad}
+                        bandH={BAND_H + 2 * yPad}
+                        lineSpacing={sp.freq} baseWidth={sp.lineWidth}
+                        imgX0={x0} imgW={secW}
+                        threshold={d?.thresholdB ?? 0.82}
+                        contrast={d?.contrastB   ?? 1.0} />
+                    </g>
                   </g>
                 </g>
               );
             }
+            const lx = treeX, rw = x0 + secW - treeX - treeW;
             return (
-              <rect key={`moire-${id}-${idx}`}
-                    x={x0} y={0} width={secW} height={BAND_H}
-                    fill={`url(#a-${idx})`} />
+              <g key={`moire-${id}-${idx}`}>
+                <rect x={x0}         y={0} width={Math.max(0, lx - x0)} height={BAND_H} fill={`url(#a-${idx})`} />
+                <rect x={lx}         y={0} width={treeW}                 height={BAND_H} fill={`url(#at-${idx})`} />
+                <rect x={lx + treeW} y={0} width={Math.max(0, rw)}       height={BAND_H} fill={`url(#a-${idx})`} />
+              </g>
             );
           })}
 
-          {/* ── Layer 3: white rect clears the tree zone ── */}
-          {/* The tree zone gets its own treatment: interrupted segments only */}
-          {sections.map(({ id, treeX, treeW }, idx) => (
-            <rect key={`treebg-${id}-${idx}`}
-                  x={treeX} y={0} width={treeW} height={BAND_H}
-                  fill="white" />
-          ))}
+
+          {/* ── Layer 3: embroidery erase overlay ── */}
+          {/* Dark pixels in image C become solid white, erasing the moiré beneath.   */}
+          {/* The image shape appears as clean white cutouts through the line pattern. */}
+          {sections.map(({ id, x0, secW, sp }, idx) => {
+            const d = locationData[id];
+            if (!d?.grayC) return null;
+            return (
+              <g key={`erase-${id}-${idx}`} clipPath={`url(#secClip-${idx})`}>
+                <EraseLineLayer
+                  grayGrid={d.grayC} x0={x0} secW={secW} bandH={BAND_H}
+                  lineSpacing={sp.freq}
+                  threshold={d.thresholdC ?? 0.5} />
+              </g>
+            );
+          })}
 
           {/* ── Layer 4: Tree of Life ── */}
-          {/* Coordinate-driven tatreez form always renders.                              */}
-          {/* When zone images are uploaded they overlay on top, adding image detail.     */}
-          {/* The stepped silhouette (lat/lon data) remains visible in both cases.        */}
           {sections.map(({ id, loc, sp, treeX, treeW }, idx) => {
             const cs      = Math.max(4, Math.round(sp.freq * params.stitchSize));
             const imgData = locationData[id];
             const useZones = hasZoneImages(imgData);
 
-            // Always compute the coordinate-driven tatreez form
-            const { stitchPath, edgePath } = buildTatreezPaths(
+            const { stitchThin, stitchMid, stitchThick, trunkPath, edgePath, tipPath, voidClearPath } = buildTatreezPaths(
               loc, treeX, treeW, BAND_H, cs, params.treeDepth,
-              params.motifType, params.motifScale
+              params.motifType, params.motifScale, params.treeStyle
             );
 
-            // Assemble zone image grid only when images are uploaded
             let assembled = null;
+            let imgCs = cs;
             if (useZones) {
-              const cols = Math.ceil(treeW / cs);
-              const rows = Math.ceil(BAND_H / cs);
+              imgCs = Math.max(4, Math.round(sp.freq * params.imageLineWeight));
+              const cols = Math.ceil(treeW / imgCs);
+              const rows = Math.ceil(BAND_H / imgCs);
               assembled = assembleTatreezGrid(
-                {
-                  crown:  imgData?.crownGrid  ?? null,
-                  branch: imgData?.branchGrid ?? null,
-                  root:   imgData?.rootGrid   ?? null,
-                },
+                { crown: imgData?.crownGrid ?? null, branch: imgData?.branchGrid ?? null, root: imgData?.rootGrid ?? null },
                 rows, cols,
-                imgData?.crownFrac  ?? 0.30,
-                imgData?.branchFrac ?? 0.40,
-                imgData?.zoneSymmetry ?? false,
+                imgData?.crownFrac ?? 0.30, imgData?.branchFrac ?? 0.40, imgData?.zoneSymmetry ?? false,
               );
             }
 
             return (
               <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
-                {/* Layer A: coordinate-driven stepped silhouette — always present */}
-                <path d={stitchPath} stroke="black" strokeWidth={sp.lineWidth}
-                      strokeLinecap="butt" fill="none" />
-                <path d={edgePath}   stroke="black" strokeWidth={sp.lineWidth * 1.4}
+                {voidClearPath && <path d={voidClearPath} stroke="white" strokeWidth={cs * 1.05}
+                      strokeLinecap="butt" fill="none" />}
+                {stitchThin  && <path d={stitchThin}  stroke="black" strokeWidth={sp.lineWidth * 0.9}  strokeLinecap="butt" fill="none" />}
+                {stitchMid   && <path d={stitchMid}   stroke="black" strokeWidth={sp.lineWidth * 1.6}  strokeLinecap="butt" fill="none" />}
+                {stitchThick && <path d={stitchThick} stroke="black" strokeWidth={sp.lineWidth * 2.4}  strokeLinecap="butt" fill="none" />}
+                {trunkPath   && <path d={trunkPath}   stroke="black" strokeWidth={sp.lineWidth * 4.0}  strokeLinecap="butt" fill="none" />}
+                <path d={edgePath} stroke="black" strokeWidth={sp.lineWidth * 1.4}
                       strokeLinecap="round" fill="none" />
-
-                {/* Layer B: zone image overlay — adds image detail on top of the form */}
-                {assembled && (
-                  <GridLineLayer
-                    grid={assembled} treeX={treeX}
-                    cs={cs} lineWidth={sp.lineWidth} />
-                )}
+                {tipPath && <path d={tipPath} stroke="black" strokeWidth={sp.lineWidth * 1.1}
+                      strokeLinecap="round" fill="none" />}
+                {assembled && <GridLineLayer grid={assembled} treeX={treeX} cs={imgCs} lineWidth={imgCs * 0.65} />}
               </g>
             );
           })}
 
-          {/* ── Portion outlines — design view only ── */}
-          {showPortions && sections.map(({ id, treeX, treeW }, idx) => (
-            <rect key={`outline-${id}-${idx}`} data-noexport="1"
-                  x={treeX} y={0} width={treeW} height={BAND_H}
-                  fill="none" stroke="#111" strokeWidth={1}
-                  strokeDasharray="4,4" opacity={0.35} />
-          ))}
 
-          {/* ── Section dividers ── */}
-          {sections.map(({ x0 }, idx) =>
-            idx > 0 ? (
-              <line key={`div-${idx}`}
-                    x1={x0} y1={0} x2={x0} y2={BAND_H}
-                    stroke="black" strokeWidth={1} />
-            ) : null
-          )}
+
+          {/* ── Layer 5: horizontal grid (bottom) ── */}
+          {/* Renders on top of everything so it cuts through moiré + tree zone.     */}
+          {/* Frequency is longitude-driven (same as vertical). horizWeight=0 = off. */}
+          {params.horizWeight > 0 && sections.map(({ id, x0, secW }, idx) => {
+            const hh = Math.round(BAND_H * Math.min(1, Math.max(0, params.horizHeight)));
+            return (
+              <rect key={`horiz-${id}-${idx}`}
+                    x={x0} y={BAND_H - hh} width={secW} height={hh}
+                    fill={`url(#hh-${idx})`} />
+            );
+          })}
 
           {/* ── Coord badges ── */}
           {sections.map(({ sp, x0 }, idx) => (
@@ -336,6 +480,52 @@ export default function PatternWall({
             );
           })}
 
+          {/* ── Infographic image strip ── */}
+          {hasAnyImages && (
+            <>
+              <line x1={0} y1={BAND_H + LABEL_H} x2={totalW} y2={BAND_H + LABEL_H}
+                    stroke="#ddd" strokeWidth={0.5} />
+              {sections.map(({ id, x0, secW }) => {
+                const d = locationData[id];
+                if (!d) return null;
+                const imgs = [
+                  { key: 'A',      src: d.previewA,      label: 'VERT'   },
+                  { key: 'B',      src: d.previewB,      label: 'ANGLE'  },
+                  { key: 'C',      src: d.previewC,      label: 'ERASE'  },
+                  { key: 'crown',  src: d.previewCrown,  label: 'CROWN'  },
+                  { key: 'branch', src: d.previewBranch, label: 'BRANCH' },
+                  { key: 'root',   src: d.previewRoot,   label: 'ROOT'   },
+                ].filter(i => i.src);
+                if (!imgs.length) return null;
+                const blockW  = imgs.length * INFO_IMG + (imgs.length - 1) * INFO_GAP;
+                const startX  = x0 + (secW - blockW) / 2;
+                const imgY    = BAND_H + LABEL_H + 10;
+                return (
+                  <g key={`info-${id}`}>
+                    {imgs.map((img, i) => {
+                      const ix = startX + i * (INFO_IMG + INFO_GAP);
+                      return (
+                        <g key={img.key}>
+                          <image href={img.src} x={ix} y={imgY}
+                                 width={INFO_IMG} height={INFO_IMG}
+                                 preserveAspectRatio="xMidYMid slice" />
+                          <rect x={ix} y={imgY} width={INFO_IMG} height={INFO_IMG}
+                                fill="none" stroke="#bbb" strokeWidth={0.5} />
+                          <text x={ix + INFO_IMG / 2} y={imgY + INFO_IMG + 9}
+                                textAnchor="middle" fontSize={6}
+                                fontFamily="'Courier New',monospace"
+                                letterSpacing="0.1em" fill="#999">
+                            {img.label}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </g>
+                );
+              })}
+            </>
+          )}
+
           {/* ── Outer frame ── */}
           <rect x={0} y={0} width={totalW} height={BAND_H}
                 fill="none" stroke="#111" strokeWidth={1} />
@@ -343,7 +533,7 @@ export default function PatternWall({
       </div>
 
       <div className="wall-footer">
-        <button className="export-btn" onClick={handleExport}>Export SVG</button>
+        <button className="export-btn" onClick={handleExportAllSvg}>Export SVG</button>
         <span className="wall-note">
           {sections.length} stops · moiré across side bands · tree of life per section
         </span>

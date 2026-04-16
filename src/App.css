@@ -26,6 +26,12 @@
 
 .header-brand {
   display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.header-brand-top {
+  display: flex;
   align-items: baseline;
   gap: 14px;
 }
@@ -48,6 +54,16 @@
   letter-spacing: 0.1em;
   color: #888;
   text-transform: uppercase;
+}
+
+.header-desc {
+  font-size: 9px;
+  color: #aaa;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.03em;
+  max-width: 480px;
+  line-height: 1.5;
+  margin-top: 3px;
 }
 
 /* ── Option switch ────────────────────────────────────────── */
@@ -442,6 +458,93 @@
   user-select: none;
 }
 .session-btn:hover { border-color: #111; color: #111; }
+
+/* ── Info panel ─────────────────────────────────────────── */
+
+.info-section { padding-bottom: 4px; }
+
+.info-toggle {
+  width: 100%;
+  padding: 6px 0;
+  background: transparent;
+  border: 1px solid #ddd;
+  color: #999;
+  font-family: 'Courier New', monospace;
+  font-size: 8px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+.info-toggle:hover { border-color: #111; color: #111; }
+
+.info-body {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.info-block { display: flex; flex-direction: column; gap: 4px; }
+
+.info-heading {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #333;
+}
+
+.info-body p {
+  font-size: 9px;
+  font-family: 'Courier New', monospace;
+  color: #666;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.info-body dl { margin: 0; display: flex; flex-direction: column; gap: 5px; }
+
+.info-body dt {
+  font-size: 8px;
+  font-weight: 700;
+  font-family: 'Courier New', monospace;
+  color: #444;
+  letter-spacing: 0.06em;
+}
+
+.info-body dd {
+  font-size: 8.5px;
+  font-family: 'Courier New', monospace;
+  color: #777;
+  line-height: 1.5;
+  margin: 0 0 0 10px;
+}
+
+.export-section-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 8px;
+}
+
+.export-loc-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.export-loc-name {
+  font-size: 8px;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.06em;
+  color: #666;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ── Main wall area ───────────────────────────────────────── */
 
