@@ -90,8 +90,8 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
     onUpload(locId, { growthFrames: updated });
   };
 
-  const handleGrowthFrameDir = (fi, horiz) => {
-    const updated = growthFrames.map((f, i) => i === fi ? { ...f, stitchHorizontal: horiz } : f);
+  const handleGrowthFrameDir = (fi, horiz, lines = false) => {
+    const updated = growthFrames.map((f, i) => i === fi ? { ...f, stitchHorizontal: horiz, stitchLines: lines } : f);
     onUpload(locId, { growthFrames: updated });
   };
 
@@ -411,11 +411,14 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
               <div className="loc-upload-row">
                 <span className="loc-upload-label">Dir</span>
                 <button
-                  className={`upload-btn${!(data?.stitchHorizontal) ? ' active' : ''}`}
-                  onClick={() => onUpload(locId, { stitchHorizontal: false })}>V</button>
+                  className={`upload-btn${!data?.stitchHorizontal && !data?.stitchLines ? ' active' : ''}`}
+                  onClick={() => onUpload(locId, { stitchHorizontal: false, stitchLines: false })}>V</button>
                 <button
-                  className={`upload-btn${data?.stitchHorizontal ? ' active' : ''}`}
-                  onClick={() => onUpload(locId, { stitchHorizontal: true })}>H</button>
+                  className={`upload-btn${data?.stitchHorizontal && !data?.stitchLines ? ' active' : ''}`}
+                  onClick={() => onUpload(locId, { stitchHorizontal: true, stitchLines: false })}>H</button>
+                <button
+                  className={`upload-btn${data?.stitchLines ? ' active' : ''}`}
+                  onClick={() => onUpload(locId, { stitchLines: true, stitchHorizontal: false })}>L</button>
               </div>
             </>
           )}
@@ -462,15 +465,20 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
                 onClick={() => handleGrowthFrameInvert(fi)}
               >INV</button>
               <button
-                className={`upload-btn${!(frame.stitchHorizontal) ? ' active' : ''}`}
+                className={`upload-btn${!frame.stitchHorizontal && !frame.stitchLines ? ' active' : ''}`}
                 style={{ fontSize: 8, padding: '2px 6px' }}
-                onClick={() => handleGrowthFrameDir(fi, false)}
+                onClick={() => handleGrowthFrameDir(fi, false, false)}
               >V</button>
               <button
-                className={`upload-btn${frame.stitchHorizontal ? ' active' : ''}`}
+                className={`upload-btn${frame.stitchHorizontal && !frame.stitchLines ? ' active' : ''}`}
                 style={{ fontSize: 8, padding: '2px 6px' }}
-                onClick={() => handleGrowthFrameDir(fi, true)}
+                onClick={() => handleGrowthFrameDir(fi, true, false)}
               >H</button>
+              <button
+                className={`upload-btn${frame.stitchLines ? ' active' : ''}`}
+                style={{ fontSize: 8, padding: '2px 6px' }}
+                onClick={() => handleGrowthFrameDir(fi, false, true)}
+              >L</button>
               <button className="clear-btn" onClick={() => handleRemoveGrowthFrame(fi)}>×</button>
               <div className="loc-width-row" style={{ marginTop: 2 }}>
                 <span className="loc-width-label">Position</span>

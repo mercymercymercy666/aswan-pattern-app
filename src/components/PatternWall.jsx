@@ -192,6 +192,70 @@ function TatreezStitchLayer({ grid, treeX, treeW, bandH, freq, lineWidth, pixelS
   );
 }
 
+/* ── Tatreez vertical-line layer ────────────────────────── */
+// Consecutive dark cells in each column merge into one continuous stroke —
+// produces the tall varying-length vertical dash look rather than short stitches.
+function TatreezLineLayer({ grid, treeX, treeW, bandH, freq, lineWidth, pixelSize = 1, yOffset = 0, thickness = 1 }) {
+  if (!grid?.length) return null;
+  const ps    = Math.max(0.25, pixelSize);
+  const pitch = ps <= 1 ? freq * ps : freq;
+  const block = ps > 1 ? Math.max(1, Math.round(ps)) : 1;
+
+  const firstX   = Math.ceil(treeX / pitch) * pitch;
+  const cols     = Math.max(0, Math.floor((treeX + treeW - firstX) / pitch));
+  const rows     = Math.floor(bandH / pitch);
+  const gRows    = grid.length;
+  const gCols    = grid[0]?.length ?? 0;
+  if (!gRows || !gCols || cols <= 0 || rows <= 0) return null;
+
+  const patCols  = Math.max(1, Math.ceil(cols / block));
+  const patRows  = Math.max(1, Math.ceil(rows / block));
+  const baseW    = Math.max(lineWidth * 2.8, pitch * 0.55) * thickness;
+  const fadeZone = Math.max(1, Math.round(cols * 0.20));
+  const buckets  = {};
+
+  const addSeg = (sw, x, y1, y2) => {
+    const key = sw.toFixed(2);
+    buckets[key] = (buckets[key] ?? '') +
+      `M${x.toFixed(1)},${y1.toFixed(1)}L${x.toFixed(1)},${y2.toFixed(1)}`;
+  };
+
+  for (let ci = 0; ci < cols; ci++) {
+    const pc           = Math.floor(ci / block);
+    const gc           = Math.min(gCols - 1, Math.floor((pc + 0.5) / patCols * gCols));
+    const distFromEdge = Math.min(ci, cols - 1 - ci);
+    const fade         = distFromEdge >= fadeZone ? 1 : Math.pow(distFromEdge / fadeZone, 1.5);
+    if (fade < 0.05) continue;
+    const sw = lineWidth + (baseW - lineWidth) * fade;
+    const sx = firstX + ci * pitch;
+    let runStart = -1;
+    for (let ri = 0; ri <= rows; ri++) {
+      let dark = false;
+      if (ri < rows) {
+        const pr = Math.floor(ri / block);
+        const gr = Math.min(gRows - 1, Math.floor((pr + 0.5) / patRows * gRows));
+        dark = grid[gr][gc] === 1;
+      }
+      if (dark && runStart === -1) { runStart = ri; }
+      else if (!dark && runStart !== -1) {
+        addSeg(sw, sx, yOffset + runStart * pitch, yOffset + ri * pitch);
+        runStart = -1;
+      }
+    }
+  }
+
+  const entries = Object.entries(buckets);
+  if (!entries.length) return null;
+  return (
+    <>
+      {entries.map(([sw, d]) => (
+        <path key={sw} d={d} stroke="black" strokeWidth={Number(sw)}
+              strokeLinecap="butt" fill="none" />
+      ))}
+    </>
+  );
+}
+
 /* ── Export helpers ─────────────────────────────────────── */
 async function blobToDataUrl(blobUrl) {
   const res  = await fetch(blobUrl);
@@ -563,9 +627,10 @@ export default function PatternWall({
             }
 
             if (imgData?.tatreezGrid) {
+              const Layer = imgData.stitchLines ? TatreezLineLayer : TatreezStitchLayer;
               return (
                 <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
-                  <TatreezStitchLayer
+                  <Layer
                     grid={imgData.tatreezGrid}
                     treeX={treeX} treeW={treeW} bandH={BAND_H}
                     freq={sp.freq} lineWidth={sp.lineWidth}
@@ -621,9 +686,10 @@ export default function PatternWall({
               const grid   = frame.inverted
                 ? frame.tatreezGrid.map(row => row.map(v => v ? 0 : 1))
                 : frame.tatreezGrid;
+              const GLayer = frame.stitchLines ? TatreezLineLayer : TatreezStitchLayer;
               return (
                 <g key={`growth-${id}-${idx}-${fi}`} clipPath={`url(#growthClip-${idx}-${fi})`}>
-                  <TatreezStitchLayer
+                  <GLayer
                     grid={grid}
                     treeX={gx} treeW={frameW}
                     bandH={frameH}
