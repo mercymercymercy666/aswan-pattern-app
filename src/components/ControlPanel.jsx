@@ -104,6 +104,21 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
     onUpload(locId, { growthFrames: growthFrames.filter((_, i) => i !== fi) });
   };
 
+  const makeAnatomyFileHandler = (gridKey, rawKey, previewKey, threshKey) => async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const t = data?.[threshKey] ?? 0.5;
+      const { rawGray, grid } = await ditherImageFileAspect(file, 128, t);
+      onUpload(locId, { [gridKey]: grid, [rawKey]: rawGray, [previewKey]: URL.createObjectURL(file), [threshKey]: t });
+    } catch (err) { console.error('Anatomy part load failed', err); }
+    e.target.value = '';
+  };
+  const handleFileCrown  = makeAnatomyFileHandler('crownGrid',  'crownRaw',  'previewCrown',  'thresholdCrown');
+  const handleFileLeaves = makeAnatomyFileHandler('leavesGrid', 'leavesRaw', 'previewLeaves', 'thresholdLeaves');
+  const handleFileTrunk  = makeAnatomyFileHandler('trunkGrid',  'trunkRaw',  'previewTrunk',  'thresholdTrunk');
+  const handleFileRoots  = makeAnatomyFileHandler('rootsGrid',  'rootsRaw',  'previewRoots',  'thresholdRoots');
+
   // Moiré layers use grayscale (not dithered binary) so pixel darkness = line width
   const makeMoireHandler = (grayKey, previewKey) => async (e) => {
     const file = e.target.files[0];
@@ -185,10 +200,173 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
       {/* Uploads (only when active) */}
       {isActive && (
         <>
-          {/* ── Tatreez stitch pattern ── */}
-          {/* Upload one of the numbered tatreez designs. Dark cells become bold
-              stitches aligned to the moiré thread columns — no white background,
-              the moiré shows through void cells as the fabric. */}
+          {/* ── Tree Anatomy (anatomy mode only) ── */}
+          {params.treeStyle === 'anatomy' && (
+            <>
+              <div className="loc-section-title">Tree Anatomy</div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Crown H</span>
+                <input type="range" min={5} max={60} step={5}
+                       value={Math.round((data?.anatomyCrownH ?? 0.25) * 100)}
+                       onChange={e => onUpload(locId, { anatomyCrownH: Number(e.target.value) / 100 })} />
+                <span className="loc-width-val">{Math.round((data?.anatomyCrownH ?? 0.25) * 100)}%</span>
+              </div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Leaves H</span>
+                <input type="range" min={5} max={80} step={5}
+                       value={Math.round((data?.anatomyLeavesH ?? 0.50) * 100)}
+                       onChange={e => onUpload(locId, { anatomyLeavesH: Number(e.target.value) / 100 })} />
+                <span className="loc-width-val">{Math.round((data?.anatomyLeavesH ?? 0.50) * 100)}%</span>
+              </div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Trunk W</span>
+                <input type="range" min={5} max={80} step={5}
+                       value={Math.round((data?.trunkWidth ?? 0.25) * 100)}
+                       onChange={e => onUpload(locId, { trunkWidth: Number(e.target.value) / 100 })} />
+                <span className="loc-width-val">{Math.round((data?.trunkWidth ?? 0.25) * 100)}%</span>
+              </div>
+
+              {/* Crown */}
+              <div className="loc-upload-row">
+                <span className="loc-upload-label">Crown</span>
+                <label className={`upload-btn ${data?.crownGrid ? 'active' : ''}`}>
+                  {data?.crownGrid ? '✓' : '+'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileCrown} />
+                </label>
+                {data?.crownGrid && <button className="clear-btn" onClick={() => onUpload(locId, { crownGrid: null, crownRaw: null, previewCrown: null })}>×</button>}
+                {data?.previewCrown && <img src={data.previewCrown} className="loc-preview-thumb" alt="" />}
+              </div>
+              {data?.crownRaw && (<>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thresh</span>
+                  <input type="range" min={5} max={95} step={1}
+                         value={Math.round((data?.thresholdCrown ?? 0.5) * 100)}
+                         onChange={e => { const t = Number(e.target.value) / 100; onUpload(locId, { thresholdCrown: t, crownGrid: applyThreshold(data.crownRaw, t) }); }} />
+                  <span className="loc-width-val">{Math.round((data?.thresholdCrown ?? 0.5) * 100)}%</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Px size</span>
+                  <input type="range" min={0.25} max={12} step={0.25}
+                         value={data?.crownPixelSize ?? 1}
+                         onChange={e => onUpload(locId, { crownPixelSize: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.crownPixelSize ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thickness</span>
+                  <input type="range" min={0.1} max={4} step={0.1}
+                         value={data?.crownThickness ?? 1}
+                         onChange={e => onUpload(locId, { crownThickness: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.crownThickness ?? 1).toFixed(1)}×</span>
+                </div>
+              </>)}
+
+              {/* Leaves */}
+              <div className="loc-upload-row">
+                <span className="loc-upload-label">Leaves</span>
+                <label className={`upload-btn ${data?.leavesGrid ? 'active' : ''}`}>
+                  {data?.leavesGrid ? '✓' : '+'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileLeaves} />
+                </label>
+                {data?.leavesGrid && <button className="clear-btn" onClick={() => onUpload(locId, { leavesGrid: null, leavesRaw: null, previewLeaves: null })}>×</button>}
+                {data?.previewLeaves && <img src={data.previewLeaves} className="loc-preview-thumb" alt="" />}
+              </div>
+              {data?.leavesRaw && (<>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thresh</span>
+                  <input type="range" min={5} max={95} step={1}
+                         value={Math.round((data?.thresholdLeaves ?? 0.5) * 100)}
+                         onChange={e => { const t = Number(e.target.value) / 100; onUpload(locId, { thresholdLeaves: t, leavesGrid: applyThreshold(data.leavesRaw, t) }); }} />
+                  <span className="loc-width-val">{Math.round((data?.thresholdLeaves ?? 0.5) * 100)}%</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Px size</span>
+                  <input type="range" min={0.25} max={12} step={0.25}
+                         value={data?.leavesPixelSize ?? 1}
+                         onChange={e => onUpload(locId, { leavesPixelSize: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.leavesPixelSize ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thickness</span>
+                  <input type="range" min={0.1} max={4} step={0.1}
+                         value={data?.leavesThickness ?? 1}
+                         onChange={e => onUpload(locId, { leavesThickness: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.leavesThickness ?? 1).toFixed(1)}×</span>
+                </div>
+              </>)}
+
+              {/* Trunk */}
+              <div className="loc-upload-row">
+                <span className="loc-upload-label">Trunk</span>
+                <label className={`upload-btn ${data?.trunkGrid ? 'active' : ''}`}>
+                  {data?.trunkGrid ? '✓' : '+'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileTrunk} />
+                </label>
+                {data?.trunkGrid && <button className="clear-btn" onClick={() => onUpload(locId, { trunkGrid: null, trunkRaw: null, previewTrunk: null })}>×</button>}
+                {data?.previewTrunk && <img src={data.previewTrunk} className="loc-preview-thumb" alt="" />}
+              </div>
+              {data?.trunkRaw && (<>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thresh</span>
+                  <input type="range" min={5} max={95} step={1}
+                         value={Math.round((data?.thresholdTrunk ?? 0.5) * 100)}
+                         onChange={e => { const t = Number(e.target.value) / 100; onUpload(locId, { thresholdTrunk: t, trunkGrid: applyThreshold(data.trunkRaw, t) }); }} />
+                  <span className="loc-width-val">{Math.round((data?.thresholdTrunk ?? 0.5) * 100)}%</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Px size</span>
+                  <input type="range" min={0.25} max={12} step={0.25}
+                         value={data?.trunkPixelSize ?? 1}
+                         onChange={e => onUpload(locId, { trunkPixelSize: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.trunkPixelSize ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thickness</span>
+                  <input type="range" min={0.1} max={4} step={0.1}
+                         value={data?.trunkThickness ?? 1}
+                         onChange={e => onUpload(locId, { trunkThickness: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.trunkThickness ?? 1).toFixed(1)}×</span>
+                </div>
+              </>)}
+
+              {/* Base / Roots */}
+              <div className="loc-upload-row">
+                <span className="loc-upload-label">Base</span>
+                <label className={`upload-btn ${data?.rootsGrid ? 'active' : ''}`}>
+                  {data?.rootsGrid ? '✓' : '+'}
+                  <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileRoots} />
+                </label>
+                {data?.rootsGrid && <button className="clear-btn" onClick={() => onUpload(locId, { rootsGrid: null, rootsRaw: null, previewRoots: null })}>×</button>}
+                {data?.previewRoots && <img src={data.previewRoots} className="loc-preview-thumb" alt="" />}
+              </div>
+              {data?.rootsRaw && (<>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thresh</span>
+                  <input type="range" min={5} max={95} step={1}
+                         value={Math.round((data?.thresholdRoots ?? 0.5) * 100)}
+                         onChange={e => { const t = Number(e.target.value) / 100; onUpload(locId, { thresholdRoots: t, rootsGrid: applyThreshold(data.rootsRaw, t) }); }} />
+                  <span className="loc-width-val">{Math.round((data?.thresholdRoots ?? 0.5) * 100)}%</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Px size</span>
+                  <input type="range" min={0.25} max={12} step={0.25}
+                         value={data?.rootsPixelSize ?? 1}
+                         onChange={e => onUpload(locId, { rootsPixelSize: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.rootsPixelSize ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>
+                </div>
+                <div className="loc-width-row">
+                  <span className="loc-width-label">Thickness</span>
+                  <input type="range" min={0.1} max={4} step={0.1}
+                         value={data?.rootsThickness ?? 1}
+                         onChange={e => onUpload(locId, { rootsThickness: Number(e.target.value) })} />
+                  <span className="loc-width-val">{Number(data?.rootsThickness ?? 1).toFixed(1)}×</span>
+                </div>
+              </>)}
+            </>
+          )}
+
+          {/* ── Tatreez stitch pattern (data / tree modes) ── */}
+          {params.treeStyle !== 'anatomy' && (
+            <>
           <div className="loc-section-title">Tatreez</div>
 
           <div className="loc-upload-row">
@@ -239,6 +417,8 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
                   className={`upload-btn${data?.stitchHorizontal ? ' active' : ''}`}
                   onClick={() => onUpload(locId, { stitchHorizontal: true })}>H</button>
               </div>
+            </>
+          )}
             </>
           )}
 
@@ -544,6 +724,10 @@ export default function ControlPanel({
             className={`motif-btn ${params.treeStyle === 'tree' ? 'active' : ''}`}
             onClick={() => set('treeStyle', 'tree')}
           >tree</button>
+          <button
+            className={`motif-btn ${params.treeStyle === 'anatomy' ? 'active' : ''}`}
+            onClick={() => set('treeStyle', 'anatomy')}
+          >anatomy</button>
         </div>
 
         <Slider label="Tree Depth" value={params.treeDepth}

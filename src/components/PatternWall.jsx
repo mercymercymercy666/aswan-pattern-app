@@ -356,6 +356,31 @@ export default function PatternWall({
                 <rect x={treeX} y={0} width={treeW} height={BAND_H} />
               </clipPath>
             ))}
+            {/* Anatomy clips — crown / leaves / base bands + trunk spine within tree zone */}
+            {params.treeStyle === 'anatomy' && sections.map(({ id, treeX, treeW }, idx) => {
+              const d       = locationData[id];
+              const crownH  = Math.round((d?.anatomyCrownH  ?? 0.25) * BAND_H);
+              const leavesH = Math.round((d?.anatomyLeavesH ?? 0.50) * BAND_H);
+              const baseH   = Math.max(0, BAND_H - crownH - leavesH);
+              const trunkW  = Math.max(10, Math.round((d?.trunkWidth ?? 0.25) * treeW));
+              const trunkX  = treeX + Math.round((treeW - trunkW) / 2);
+              return (
+                <g key={`aclip-${id}-${idx}`}>
+                  <clipPath id={`crownClip-${idx}`}>
+                    <rect x={treeX} y={0} width={treeW} height={crownH} />
+                  </clipPath>
+                  <clipPath id={`leavesClip-${idx}`}>
+                    <rect x={treeX} y={crownH} width={treeW} height={leavesH} />
+                  </clipPath>
+                  <clipPath id={`baseClip-${idx}`}>
+                    <rect x={treeX} y={crownH + leavesH} width={treeW} height={baseH} />
+                  </clipPath>
+                  <clipPath id={`trunkClip-${idx}`}>
+                    <rect x={trunkX} y={0} width={trunkW} height={BAND_H} />
+                  </clipPath>
+                </g>
+              );
+            })}
             {/* Growth frame clips — full section width, y-strip from bottom */}
             {sections.map(({ id, x0, secW, treeW }, idx) =>
               Array.from({ length: maxGrowthFrames }, (_, fi) => {
@@ -485,6 +510,57 @@ export default function PatternWall({
               When no image: fall back to the coordinate-driven tree zone. */}
           {sections.map(({ id, loc, sp, treeX, treeW }, idx) => {
             const imgData = locationData[id];
+
+            // === Anatomy mode: Crown / Leaves / Trunk / Base each in own zone ===
+            if (params.treeStyle === 'anatomy') {
+              const crownH  = Math.round((imgData?.anatomyCrownH  ?? 0.25) * BAND_H);
+              const leavesH = Math.round((imgData?.anatomyLeavesH ?? 0.50) * BAND_H);
+              const baseH   = Math.max(0, BAND_H - crownH - leavesH);
+              const trunkW  = Math.max(10, Math.round((imgData?.trunkWidth ?? 0.25) * treeW));
+              const trunkX  = treeX + Math.round((treeW - trunkW) / 2);
+              return (
+                <g key={`tree-${id}-${idx}`}>
+                  {imgData?.crownGrid && (
+                    <g clipPath={`url(#crownClip-${idx})`}>
+                      <TatreezStitchLayer grid={imgData.crownGrid}
+                        treeX={treeX} treeW={treeW} bandH={crownH}
+                        freq={sp.freq} lineWidth={sp.lineWidth}
+                        pixelSize={imgData.crownPixelSize ?? 1}
+                        thickness={imgData.crownThickness ?? 1} />
+                    </g>
+                  )}
+                  {imgData?.leavesGrid && (
+                    <g clipPath={`url(#leavesClip-${idx})`}>
+                      <TatreezStitchLayer grid={imgData.leavesGrid}
+                        treeX={treeX} treeW={treeW} bandH={leavesH}
+                        freq={sp.freq} lineWidth={sp.lineWidth}
+                        yOffset={crownH}
+                        pixelSize={imgData.leavesPixelSize ?? 1}
+                        thickness={imgData.leavesThickness ?? 1} />
+                    </g>
+                  )}
+                  {imgData?.rootsGrid && (
+                    <g clipPath={`url(#baseClip-${idx})`}>
+                      <TatreezStitchLayer grid={imgData.rootsGrid}
+                        treeX={treeX} treeW={treeW} bandH={baseH}
+                        freq={sp.freq} lineWidth={sp.lineWidth}
+                        yOffset={crownH + leavesH}
+                        pixelSize={imgData.rootsPixelSize ?? 1}
+                        thickness={imgData.rootsThickness ?? 1} />
+                    </g>
+                  )}
+                  {imgData?.trunkGrid && (
+                    <g clipPath={`url(#trunkClip-${idx})`}>
+                      <TatreezStitchLayer grid={imgData.trunkGrid}
+                        treeX={trunkX} treeW={trunkW} bandH={BAND_H}
+                        freq={sp.freq} lineWidth={sp.lineWidth}
+                        pixelSize={imgData.trunkPixelSize ?? 1}
+                        thickness={imgData.trunkThickness ?? 1} />
+                    </g>
+                  )}
+                </g>
+              );
+            }
 
             if (imgData?.tatreezGrid) {
               return (
