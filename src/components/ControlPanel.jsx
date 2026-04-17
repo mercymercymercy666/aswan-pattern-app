@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { LOCATIONS, GEO_ORDER } from '../data/locations';
 import { ditherImageFileAspect, grayscaleImageFile, applyThreshold } from '../patterns/dither';
 import { coordsToSectionParams } from '../patterns/moire';
@@ -405,8 +404,6 @@ export default function ControlPanel({
   onSaveSession, onLoadSession,
 }) {
   const set = (key, val) => onChange({ ...params, [key]: val });
-  const [showInfo, setShowInfo] = useState(false);
-
   const bandWidth = (() => {
     const a = Math.abs(params.moireAngle) * Math.PI / 180;
     return a > 0.001 ? Math.round(params.lineSpacing / (2 * Math.sin(a / 2))) : '∞';
@@ -414,72 +411,6 @@ export default function ControlPanel({
 
   return (
     <aside className="control-panel">
-
-      {/* ── Info panel ── */}
-      <section className="ctrl-section info-section">
-        <button className="info-toggle" onClick={() => setShowInfo(v => !v)}>
-          {showInfo ? '× close' : '? how to use'}
-        </button>
-        {showInfo && (
-          <div className="info-body">
-            <div className="info-block">
-              <div className="info-heading">What this is</div>
-              <p>A moiré interference pattern generator for stone carving. Each country section encodes its geographic coordinates directly into the pattern — the output SVG is a displacement map for Rhino.</p>
-            </div>
-
-            <div className="info-block">
-              <div className="info-heading">Pattern layers</div>
-              <dl>
-                <dt>A — Vertical</dt>
-                <dd>Base vertical lines. Upload an image to replace with a grayscale density map — dark pixels become thicker lines.</dd>
-                <dt>B — Angle</dt>
-                <dd>Second layer rotated by the overlay angle. Interference with A creates moiré bands. Upload an image for a data-driven angled layer.</dd>
-                <dt>C — Erase</dt>
-                <dd>Embroidery mask. Dark pixels in this image cut through all layers as white — the image shape appears as clean negative space across the full section.</dd>
-                <dt>Horiz Lines</dt>
-                <dd>Horizontal grid at the bottom of the band. Weight and height adjustable — integrates with the moiré frequency.</dd>
-              </dl>
-            </div>
-
-            <div className="info-block">
-              <div className="info-heading">Tree of Life zone</div>
-              <p>The moiré lines are the embroidery threads — the fabric. Uploading a tatreez pattern stitches bold marks onto those exact thread columns, so the moiré shows through the void cells as the fabric texture.</p>
-              <dl>
-                <dt>Tatreez (upload)</dt>
-                <dd>Upload one of the numbered tatreez designs. Black cells become bold stitches aligned to the moiré columns. No white background — the pattern floats on the moiré. Threshold adjusts how many cells become stitches.</dd>
-                <dt>No upload (default)</dt>
-                <dd>Falls back to the coordinate-driven tree: silhouette profile, branch depth, and column density derived from lat/lon. Branch style, motif, and stitch size still apply.</dd>
-                <dt>Branch style: data</dt>
-                <dd>Branch depths follow the same lat/lon wave as the top silhouette — pure coordinate encoding.</dd>
-                <dt>Branch style: tree</dt>
-                <dd>Branches taper outward from trunk — latitude controls taper steepness, longitude adds undulating side-branch groupings.</dd>
-                <dt>Motif</dt>
-                <dd>Ornamental void pattern (diamond / chevron / star / all) cut into the default tree zone as white negative space.</dd>
-              </dl>
-            </div>
-
-            <div className="info-block">
-              <div className="info-heading">Coordinate encoding</div>
-              <dl>
-                <dt>Longitude →</dt>
-                <dd>Line spacing (frequency) and branch column density.</dd>
-                <dt>Latitude →</dt>
-                <dd>Moiré overlay angle, tree silhouette amplitude and peak count, branch taper depth.</dd>
-              </dl>
-            </div>
-
-            <div className="info-block">
-              <div className="info-heading">Export</div>
-              <dl>
-                <dt>All SVG / All JPG</dt>
-                <dd>Full wall including input image thumbnails at the bottom.</dd>
-                <dt>Per-country SVG / JPG</dt>
-                <dd>Each section cropped individually. JPEG is 2× resolution for print quality.</dd>
-              </dl>
-            </div>
-          </div>
-        )}
-      </section>
 
       {/* ── Mode ── */}
       <section className="ctrl-section">

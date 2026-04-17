@@ -123,11 +123,7 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="header-brand">
-          <div className="header-brand-top">
-            <span className="header-title">ASWAN</span>
-            <span className="header-sub">Tree of Life — Nizari Ismaili Patternwork</span>
-          </div>
-          <span className="header-desc">Each country's coordinates are encoded as pattern — longitude sets line density and branch rhythm, latitude sets moiré angle and tree silhouette — together a displacement map for stone carving.</span>
+          <span className="header-title">ASWAN</span>
         </div>
         <div className="header-right">
           <span className="preset-label">Presets</span>
