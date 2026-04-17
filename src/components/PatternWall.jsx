@@ -630,14 +630,19 @@ export default function PatternWall({
             }
 
             if (imgData?.tatreezGrid) {
+              // Compute exact grid-snapped bounds (same logic as TatreezLineLayer / TatreezStitchLayer)
+              const ps     = Math.max(0.25, imgData.tatreezPixelSize ?? 1);
+              const pitch  = ps <= 1 ? sp.freq * ps : sp.freq;
+              const firstX = Math.ceil(treeX / pitch) * pitch;
+              const cols   = Math.max(0, Math.floor((treeX + treeW - firstX) / pitch));
+              // Erase rect: from first column to right edge of tree zone (avoids thin moiré bleed on right)
+              const eraseX = firstX;
+              const eraseW = treeX + treeW - firstX;
+
               if (imgData.stitchLines) {
-                const ps      = Math.max(0.25, imgData.tatreezPixelSize ?? 1);
-                const pitch   = ps <= 1 ? sp.freq * ps : sp.freq;
-                const firstX  = Math.ceil(treeX / pitch) * pitch;
-                const cols    = Math.max(0, Math.floor((treeX + treeW - firstX) / pitch));
                 return (
                   <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
-                    <rect x={firstX} y={0} width={cols * pitch} height={BAND_H} fill="white" />
+                    <rect x={eraseX} y={0} width={eraseW} height={BAND_H} fill="white" />
                     <TatreezLineLayer
                       rawGrid={imgData.tatreezRaw}
                       grid={imgData.tatreezGrid}
@@ -648,8 +653,10 @@ export default function PatternWall({
                   </g>
                 );
               }
+              // V / H stitch mode — erase background so stitches are visible on white
               return (
                 <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
+                  <rect x={eraseX} y={0} width={eraseW} height={BAND_H} fill="white" />
                   <TatreezStitchLayer
                     grid={imgData.tatreezGrid}
                     treeX={treeX} treeW={treeW} bandH={BAND_H}
@@ -710,10 +717,9 @@ export default function PatternWall({
                 const fps     = Math.max(0.25, frame.tatreezPixelSize ?? 1);
                 const fpitch  = fps <= 1 ? sp.freq * fps : sp.freq;
                 const ffirstX = Math.ceil(gx / fpitch) * fpitch;
-                const fcols   = Math.max(0, Math.floor((gx + frameW - ffirstX) / fpitch));
                 return (
                   <g key={`growth-${id}-${idx}-${fi}`} clipPath={`url(#growthClip-${idx}-${fi})`}>
-                    <rect x={ffirstX} y={Math.max(0, y0)} width={fcols * fpitch} height={visH} fill="white" />
+                    <rect x={ffirstX} y={Math.max(0, y0)} width={gx + frameW - ffirstX} height={visH} fill="white" />
                     <TatreezLineLayer
                       rawGrid={frame.tatreezRaw}
                       grid={grid}
