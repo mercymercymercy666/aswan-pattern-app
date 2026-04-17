@@ -446,18 +446,34 @@ export default function PatternWall({
           })}
 
 
-          {/* ── Layer 3: embroidery erase overlay ── */}
-          {/* Dark pixels in image C become solid white, erasing the moiré beneath.   */}
-          {/* The image shape appears as clean white cutouts through the line pattern. */}
-          {sections.map(({ id, x0, secW, sp }, idx) => {
+          {/* ── Layer 3: C overlay — tree zone only ── */}
+          {/* Erase mode: dark pixels → white lines, punches holes in moiré.          */}
+          {/* Add mode: dark pixels → black stitches on top, like tatreez overlay.    */}
+          {/* Both modes are clipped to the tree zone width.                          */}
+          {sections.map(({ id, x0, secW, treeX, treeW, sp }, idx) => {
             const d = locationData[id];
             if (!d?.grayC) return null;
+            const thresh = d.thresholdC ?? 0.5;
+            if (d.cMode === 'add') {
+              const cGrid = d.grayC.map(row => row.map(v => v <= thresh ? 1 : 0));
+              return (
+                <g key={`cerase-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
+                  <TatreezStitchLayer
+                    grid={cGrid}
+                    treeX={treeX} treeW={treeW} bandH={BAND_H}
+                    freq={sp.freq} lineWidth={sp.lineWidth}
+                    pixelSize={d.tatreezPixelSize ?? 1}
+                    thickness={d.tatreezThickness ?? 1}
+                    horizontal={d.stitchHorizontal ?? false} />
+                </g>
+              );
+            }
             return (
-              <g key={`erase-${id}-${idx}`} clipPath={`url(#secClip-${idx})`}>
+              <g key={`cerase-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
                 <EraseLineLayer
-                  grayGrid={d.grayC} x0={x0} secW={secW} bandH={BAND_H}
+                  grayGrid={d.grayC} x0={treeX} secW={treeW} bandH={BAND_H}
                   lineSpacing={sp.freq}
-                  threshold={d.thresholdC ?? 0.5} />
+                  threshold={thresh} />
               </g>
             );
           })}

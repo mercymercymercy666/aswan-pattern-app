@@ -392,9 +392,9 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
             </div>
           </>)}
 
-          {/* Layer C (embroidery erase) */}
+          {/* Layer C (tree zone erase or add) */}
           <div className="loc-upload-row">
-            <span className="loc-upload-label">C erase</span>
+            <span className="loc-upload-label">C tree</span>
             <label className={`upload-btn ${data?.grayC ? 'active' : ''}`}>
               {data?.grayC ? '✓' : '+'}
               <input type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFileMoireC} />
@@ -404,7 +404,16 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
             )}
             {data?.previewC && <img src={data.previewC} className="loc-preview-thumb" alt="" />}
           </div>
-          {data?.grayC && (
+          {data?.grayC && (<>
+            <div className="loc-upload-row">
+              <span className="loc-upload-label">Mode</span>
+              <button
+                className={`upload-btn${!(data?.cMode === 'add') ? ' active' : ''}`}
+                onClick={() => onUpload(locId, { cMode: 'erase' })}>Erase</button>
+              <button
+                className={`upload-btn${data?.cMode === 'add' ? ' active' : ''}`}
+                onClick={() => onUpload(locId, { cMode: 'add' })}>Add</button>
+            </div>
             <div className="loc-width-row">
               <span className="loc-width-label">Thresh</span>
               <input type="range" min={5} max={99} step={1}
@@ -412,7 +421,7 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
                      onChange={e => onUpload(locId, { thresholdC: Number(e.target.value) / 100 })} />
               <span className="loc-width-val">{Math.round((data?.thresholdC ?? 0.5) * 100)}%</span>
             </div>
-          )}
+          </>)}
         </>
       )}
     </div>
