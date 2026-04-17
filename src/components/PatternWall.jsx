@@ -1,7 +1,6 @@
 import { useMemo, useRef } from 'react';
 import { LOCATIONS } from '../data/locations';
 import { coordsToSectionParams, buildTatreezPaths } from '../patterns/moire';
-import { assembleTatreezGrid, hasZoneImages } from '../patterns/tatreez';
 
 const LABEL_H  = 80;
 const INFO_IMG  = 90; // thumbnail size (px)
@@ -13,15 +12,6 @@ function VertPat({ id, freq, lw }) {
   return (
     <pattern id={id} width={freq} height={freq} patternUnits="userSpaceOnUse">
       <line x1={0} y1={0} x2={0} y2={freq} stroke="black" strokeWidth={lw} />
-    </pattern>
-  );
-}
-
-/* ── Horizontal line pattern ─────────────────────────────── */
-function HorizPat({ id, freq, lw }) {
-  return (
-    <pattern id={id} width={freq} height={freq} patternUnits="userSpaceOnUse">
-      <line x1={0} y1={0} x2={freq} y2={0} stroke="black" strokeWidth={lw} />
     </pattern>
   );
 }
@@ -115,24 +105,80 @@ function EraseLineLayer({ grayGrid, x0, secW, bandH, lineSpacing, threshold }) {
   );
 }
 
-/* ── Assembled tatreez zone grid → vertical line segments ── */
-function GridLineLayer({ grid, treeX, cs, lineWidth }) {
-  const rows = grid.length;
-  const cols = grid[0]?.length || 0;
-  if (!rows || !cols) return null;
-  const gap = cs * 0.09;
-  let d = '';
+
+/* ── Tatreez stitch overlay ─────────────────────────────── */
+// Confined to the tree zone (treeX / treeW). Stitches align to the same
+// column positions as the moiré vertical lines so they feel like the same threads.
+// Edge fade: columns near the zone boundary get progressively thinner strokes
+// so the embroidery blends into the moiré rather than hard-cutting.
+// pixelSize controls both stitch density and pattern coarseness:
+//   < 1  (e.g. 0.5): stitch pitch = freq * pixelSize — denser than moiré columns,
+//        finer embroidery texture, image sampled 1-stitch-per-image-pixel
+//   = 1  : stitches exactly on moiré columns (default)
+//   > 1  : stitches on moiré columns, but each image pixel covers ps×ps stitches
+//        — chunky pixel-art / classic tatreez block look
+function TatreezStitchLayer({ grid, treeX, treeW, bandH, freq, lineWidth, pixelSize = 1, yOffset = 0, thickness = 1 }) {
+  if (!grid?.length) return null;
+  const ps     = Math.max(0.25, pixelSize);
+  // Stitch pitch: sub-moiré when ps<1, moiré-aligned when ps>=1
+  const pitch  = ps <= 1 ? freq * ps : freq;
+  // Coarse block size (only meaningful when ps>1)
+  const block  = ps > 1 ? Math.max(1, Math.round(ps)) : 1;
+
+  // Stitch grid origin aligned to pitch
+  const firstX = Math.ceil(treeX / pitch) * pitch;
+  const cols   = Math.max(0, Math.floor((treeX + treeW - firstX) / pitch));
+  const rows   = Math.floor(bandH / pitch);
+  const gRows  = grid.length;
+  const gCols  = grid[0]?.length ?? 0;
+  if (!gRows || !gCols || cols <= 0 || rows <= 0) return null;
+
+  // Pattern resolution: how many distinct image samples across/down
+  const patCols = Math.max(1, Math.ceil(cols / block));
+  const patRows = Math.max(1, Math.ceil(rows / block));
+
+  // Stroke width scales with pitch so stitches fill their cell at any density
+  const baseW    = Math.max(lineWidth * 2.8, pitch * 0.55) * thickness;
+  const fadeZone = Math.max(1, Math.round(cols * 0.20));
+  const gap      = pitch * 0.06;
+
+  const buckets = {};
+  const addSeg  = (sw, sx, y1, y2) => {
+    const key = sw.toFixed(2);
+    buckets[key] = (buckets[key] ?? '') +
+      `M${sx.toFixed(1)},${y1.toFixed(1)}L${sx.toFixed(1)},${y2.toFixed(1)}`;
+  };
+
   for (let ri = 0; ri < rows; ri++) {
+    const pr = Math.floor(ri / block);
+    const gr = Math.min(gRows - 1, Math.floor((pr + 0.5) / patRows * gRows));
     for (let ci = 0; ci < cols; ci++) {
-      if (!grid[ri][ci]) continue;
-      const cx = treeX + ci * cs + cs / 2;
-      const y1 = ri * cs + gap;
-      const y2 = (ri + 1) * cs - gap;
-      d += `M${cx.toFixed(1)},${y1.toFixed(1)}L${cx.toFixed(1)},${y2.toFixed(1)}`;
+      const pc = Math.floor(ci / block);
+      const gc = Math.min(gCols - 1, Math.floor((pc + 0.5) / patCols * gCols));
+      if (!grid[gr][gc]) continue;
+
+      const distFromEdge = Math.min(ci, cols - 1 - ci);
+      const fade = distFromEdge >= fadeZone
+        ? 1
+        : Math.pow(distFromEdge / fadeZone, 1.5);
+      if (fade < 0.05) continue;
+
+      const sw = lineWidth + (baseW - lineWidth) * fade;
+      const sx = firstX + ci * pitch;
+      addSeg(sw, sx, yOffset + ri * pitch + gap, yOffset + (ri + 1) * pitch - gap);
     }
   }
-  if (!d) return null;
-  return <path d={d} stroke="black" strokeWidth={lineWidth} strokeLinecap="butt" fill="none" />;
+
+  const entries = Object.entries(buckets);
+  if (!entries.length) return null;
+  return (
+    <>
+      {entries.map(([sw, d]) => (
+        <path key={sw} d={d} stroke="black" strokeWidth={Number(sw)}
+              strokeLinecap="butt" fill="none" />
+      ))}
+    </>
+  );
 }
 
 /* ── Export helpers ─────────────────────────────────────── */
@@ -191,12 +237,16 @@ function triggerDownload(blob, filename) {
 export default function PatternWall({
   activeLocations, params, locationData, sectionWidths, treeWidths, exportRef,
 }) {
-  const svgRef  = useRef(null);
-  const BAND_H  = params.wallHeight;
+  const svgRef        = useRef(null);
+  const BAND_H        = params.wallHeight;
+  const GROWTH_FRAME_H = params.growthFrameH ?? 100;
+
+  const maxGrowthFrames = activeLocations.reduce((max, id) =>
+    Math.max(max, locationData[id]?.growthFrames?.length ?? 0), 0);
 
   const hasAnyImages = activeLocations.some((id) => {
     const d = locationData[id];
-    return d?.previewA || d?.previewB || d?.previewC || d?.previewCrown || d?.previewBranch || d?.previewRoot;
+    return d?.previewA || d?.previewB || d?.previewC || d?.previewTatreez;
   });
   const TOTAL_H = BAND_H + LABEL_H + (hasAnyImages ? INFO_H : 0);
 
@@ -281,8 +331,6 @@ export default function PatternWall({
                 {/* Thin variants for inside the tree zone */}
                 <VertPat  id={`vt-${idx}`} freq={sp.freq} lw={sp.lineWidth * 0.6} />
                 <AnglePat id={`at-${idx}`} angle={sp.angle} freq={sp.freq} lw={sp.lineWidth * 0.6} />
-                {/* Horizontal grid — same freq as vertical (longitude-driven) */}
-                <HorizPat id={`hh-${idx}`} freq={sp.freq} lw={sp.lineWidth * params.horizWeight} />
               </g>
             ))}
             {/* Section-bounds clip (for image-driven angled layer) */}
@@ -297,6 +345,25 @@ export default function PatternWall({
                 <rect x={treeX} y={0} width={treeW} height={BAND_H} />
               </clipPath>
             ))}
+            {/* Growth frame clips — full section width, y-strip from bottom */}
+            {sections.map(({ id, x0, secW, treeW }, idx) =>
+              Array.from({ length: maxGrowthFrames }, (_, fi) => {
+                const d      = locationData[id];
+                const frame  = d?.growthFrames?.[fi];
+                const frameH = d?.growthFrameH ?? GROWTH_FRAME_H;
+                const frameW = frame?.frameW ?? treeW;
+                const gx     = x0 + (frame?.xOffset ?? 0);
+                const y1     = BAND_H - fi * frameH;
+                const y0     = y1 - frameH;
+                const clipY  = Math.max(0, y0);
+                const clipH  = y0 >= 0 ? frameH : y1;
+                return (
+                  <clipPath key={`gclip-${id}-${idx}-${fi}`} id={`growthClip-${idx}-${fi}`}>
+                    <rect x={gx} y={clipY} width={frameW} height={Math.max(0, clipH)} />
+                  </clipPath>
+                );
+              })
+            )}
           </defs>
 
           {/* ── White background ── */}
@@ -385,29 +452,32 @@ export default function PatternWall({
           })}
 
           {/* ── Layer 4: Tree of Life ── */}
+          {/* When a tatreez pattern image is uploaded: render as bold stitches aligned
+              to the moiré column grid — NO white background, moiré shows through the
+              void cells as the "fabric". The tatreez shape IS the tree boundary.
+              When no image: fall back to the coordinate-driven tree zone. */}
           {sections.map(({ id, loc, sp, treeX, treeW }, idx) => {
-            const cs      = Math.max(4, Math.round(sp.freq * params.stitchSize));
             const imgData = locationData[id];
-            const useZones = hasZoneImages(imgData);
 
+            if (imgData?.tatreezGrid) {
+              return (
+                <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
+                  <TatreezStitchLayer
+                    grid={imgData.tatreezGrid}
+                    treeX={treeX} treeW={treeW} bandH={BAND_H}
+                    freq={sp.freq} lineWidth={sp.lineWidth}
+                    pixelSize={imgData.tatreezPixelSize ?? 1}
+                    thickness={imgData.tatreezThickness ?? 1} />
+                </g>
+              );
+            }
+
+            // Fallback: coordinate-driven tatreez tree zone (white background box)
+            const cs = Math.max(4, Math.round(sp.freq * params.stitchSize));
             const { stitchThin, stitchMid, stitchThick, trunkPath, edgePath, tipPath, voidClearPath } = buildTatreezPaths(
               loc, treeX, treeW, BAND_H, cs, params.treeDepth,
               params.motifType, params.motifScale, params.treeStyle
             );
-
-            let assembled = null;
-            let imgCs = cs;
-            if (useZones) {
-              imgCs = Math.max(4, Math.round(sp.freq * params.imageLineWeight));
-              const cols = Math.ceil(treeW / imgCs);
-              const rows = Math.ceil(BAND_H / imgCs);
-              assembled = assembleTatreezGrid(
-                { crown: imgData?.crownGrid ?? null, branch: imgData?.branchGrid ?? null, root: imgData?.rootGrid ?? null },
-                rows, cols,
-                imgData?.crownFrac ?? 0.30, imgData?.branchFrac ?? 0.40, imgData?.zoneSymmetry ?? false,
-              );
-            }
-
             return (
               <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
                 {voidClearPath && <path d={voidClearPath} stroke="white" strokeWidth={cs * 1.05}
@@ -420,23 +490,46 @@ export default function PatternWall({
                       strokeLinecap="round" fill="none" />
                 {tipPath && <path d={tipPath} stroke="black" strokeWidth={sp.lineWidth * 1.1}
                       strokeLinecap="round" fill="none" />}
-                {assembled && <GridLineLayer grid={assembled} treeX={treeX} cs={imgCs} lineWidth={imgCs * 0.65} />}
               </g>
             );
           })}
 
 
 
-          {/* ── Layer 5: horizontal grid (bottom) ── */}
-          {/* Renders on top of everything so it cuts through moiré + tree zone.     */}
-          {/* Frequency is longitude-driven (same as vertical). horizWeight=0 = off. */}
-          {params.horizWeight > 0 && sections.map(({ id, x0, secW }, idx) => {
-            const hh = Math.round(BAND_H * Math.min(1, Math.max(0, params.horizHeight)));
-            return (
-              <rect key={`horiz-${id}-${idx}`}
-                    x={x0} y={BAND_H - hh} width={secW} height={hh}
-                    fill={`url(#hh-${idx})`} />
-            );
+          {/* ── Growth frame overlays — inside the moiré band ── */}
+          {/* Frames stack from the bottom of the band upward. Frame 0 = bottom strip,
+              frame N-1 = closest strip to the main tree. Each just adds a tatreez
+              stitch overlay on top of the already-rendered moiré — no extra band,
+              no white background — pure continuation of the same fabric. */}
+          {maxGrowthFrames > 0 && sections.map(({ id, sp, x0, treeW }, idx) => {
+            const d        = locationData[id];
+            const frames   = d?.growthFrames ?? [];
+            const frameH   = d?.growthFrameH ?? GROWTH_FRAME_H;
+            return Array.from({ length: maxGrowthFrames }, (_, fi) => {
+              const frame = frames[fi];
+              if (!frame?.tatreezGrid) return null;
+              const y1     = BAND_H - fi * frameH;
+              const y0     = y1 - frameH;
+              const visH   = y0 >= 0 ? frameH : Math.max(0, y1);
+              if (y0 >= BAND_H || y1 <= 0 || visH < frameH * 0.5) return null;
+              const gx     = x0 + (frame.xOffset ?? 0);
+              const frameW = frame.frameW ?? treeW;
+              const grid   = frame.inverted
+                ? frame.tatreezGrid.map(row => row.map(v => v ? 0 : 1))
+                : frame.tatreezGrid;
+              return (
+                <g key={`growth-${id}-${idx}-${fi}`} clipPath={`url(#growthClip-${idx}-${fi})`}>
+                  <TatreezStitchLayer
+                    grid={grid}
+                    treeX={gx} treeW={frameW}
+                    bandH={frameH}
+                    freq={sp.freq} lineWidth={sp.lineWidth}
+                    pixelSize={frame.tatreezPixelSize ?? 1}
+                    thickness={frame.tatreezThickness ?? 1}
+                    yOffset={Math.max(0, y0)} />
+                </g>
+              );
+            });
           })}
 
           {/* ── Coord badges ── */}
@@ -489,12 +582,10 @@ export default function PatternWall({
                 const d = locationData[id];
                 if (!d) return null;
                 const imgs = [
-                  { key: 'A',      src: d.previewA,      label: 'VERT'   },
-                  { key: 'B',      src: d.previewB,      label: 'ANGLE'  },
-                  { key: 'C',      src: d.previewC,      label: 'ERASE'  },
-                  { key: 'crown',  src: d.previewCrown,  label: 'CROWN'  },
-                  { key: 'branch', src: d.previewBranch, label: 'BRANCH' },
-                  { key: 'root',   src: d.previewRoot,   label: 'ROOT'   },
+                  { key: 'A',       src: d.previewA,       label: 'VERT'   },
+                  { key: 'B',       src: d.previewB,       label: 'ANGLE'  },
+                  { key: 'C',       src: d.previewC,       label: 'ERASE'  },
+                  { key: 'tatreez', src: d.previewTatreez, label: 'STITCH' },
                 ].filter(i => i.src);
                 if (!imgs.length) return null;
                 const blockW  = imgs.length * INFO_IMG + (imgs.length - 1) * INFO_GAP;

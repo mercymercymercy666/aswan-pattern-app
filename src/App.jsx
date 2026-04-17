@@ -20,8 +20,7 @@ const DEFAULT_PARAMS = {
   motifScale:      3,
   imageLineWeight: 2.5,
   treeStyle:       'data',  // 'data' | 'tree'
-  horizWeight:     1.0,    // horizontal grid line weight as fraction of lineWidth (0 = off)
-  horizHeight:     0.25,   // fraction of band height from bottom that shows horizontal lines
+  growthFrameH:    100,    // px height of each growth frame strip
 };
 
 export default function App() {

@@ -528,6 +528,12 @@
   margin-top: 8px;
 }
 
+.growth-frame-row {
+  border-left: 2px solid #c8b89a;
+  padding-left: 8px;
+  margin: 4px 0 8px;
+}
+
 .export-loc-row {
   display: grid;
   grid-template-columns: 1fr auto auto;

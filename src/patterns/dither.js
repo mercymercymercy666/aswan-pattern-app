@@ -75,3 +75,46 @@ export function ditherImageFile(file, gridSize = 48, threshold = 0.5) {
     img.src = url;
   });
 }
+
+/**
+ * Like ditherImageFile but preserves the image's natural aspect ratio.
+ * The longer dimension is capped at maxSize; the shorter scales proportionally.
+ * This keeps tall narrow pixel-art trees from being squashed into a square.
+ */
+export function ditherImageFileAspect(file, maxSize = 128, threshold = 0.5) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      const nw = img.naturalWidth  || 1;
+      const nh = img.naturalHeight || 1;
+      const scale = Math.min(1, maxSize / Math.max(nw, nh));
+      const W = Math.max(8, Math.round(nw * scale));
+      const H = Math.max(8, Math.round(nh * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = W;
+      canvas.height = H;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, W, H);
+      const px = ctx.getImageData(0, 0, W, H).data;
+
+      const rawGray = [];
+      for (let r = 0; r < H; r++) {
+        const row = [];
+        for (let c = 0; c < W; c++) {
+          const i = r * W + c;
+          row.push((px[i*4]*0.299 + px[i*4+1]*0.587 + px[i*4+2]*0.114) / 255);
+        }
+        rawGray.push(row);
+      }
+
+      URL.revokeObjectURL(url);
+      resolve({ rawGray, grid: applyThreshold(rawGray, threshold) });
+    };
+
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Image load failed')); };
+    img.src = url;
+  });
+}

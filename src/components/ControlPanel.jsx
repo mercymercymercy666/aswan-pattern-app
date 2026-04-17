@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { LOCATIONS, GEO_ORDER } from '../data/locations';
-import { ditherImageFile, grayscaleImageFile, applyThreshold } from '../patterns/dither';
+import { ditherImageFileAspect, grayscaleImageFile, applyThreshold } from '../patterns/dither';
 import { coordsToSectionParams } from '../patterns/moire';
 
 function Slider({ label, value, min, max, step, unit, onChange, hint }) {
@@ -28,28 +28,76 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
     ? coordsToSectionParams(loc.lat, loc.lon, params)
     : null;
 
-  const threshold = data?.threshold ?? 0.5;
-
-  // rawKey stores the float grayscale; gridKey stores the thresholded binary
-  const makeFileHandler = (gridKey, rawKey, previewKey) => async (e) => {
+  // Tatreez stitch pattern upload — preserve aspect ratio so tall narrow trees aren't squashed
+  const handleFileTatreez = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     try {
-      const { rawGray, grid } = await ditherImageFile(file, 48, threshold);
+      const t = data?.thresholdTatreez ?? 0.5;
+      const { rawGray, grid } = await ditherImageFileAspect(file, 128, t);
       const previewUrl = URL.createObjectURL(file);
-      onUpload(locId, { [gridKey]: grid, [rawKey]: rawGray, [previewKey]: previewUrl });
+      onUpload(locId, { tatreezGrid: grid, tatreezRaw: rawGray, previewTatreez: previewUrl, thresholdTatreez: t });
     } catch (err) {
-      console.error('Dither failed', err);
+      console.error('Tatreez load failed', err);
     }
   };
 
-  const handleThresholdChange = (t) => {
-    // Recompute all zone grids from stored raw data at new threshold
-    const updates = { threshold: t };
-    if (data?.crownRaw)  updates.crownGrid  = applyThreshold(data.crownRaw,  t);
-    if (data?.branchRaw) updates.branchGrid = applyThreshold(data.branchRaw, t);
-    if (data?.rootRaw)   updates.rootGrid   = applyThreshold(data.rootRaw,   t);
-    onUpload(locId, updates);
+  const handleTatreezThreshold = (t) => {
+    onUpload(locId, { thresholdTatreez: t, tatreezGrid: applyThreshold(data.tatreezRaw, t) });
+  };
+
+  // Growth frames — array of { tatreezGrid, tatreezRaw, previewTatreez, thresholdTatreez, tatreezPixelSize }
+  const growthFrames = data?.growthFrames ?? [];
+
+  const handleAddGrowthFrame = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const t = 0.5;
+      const { rawGray, grid } = await ditherImageFileAspect(file, 128, t);
+      const previewUrl = URL.createObjectURL(file);
+      const newFrame = { tatreezGrid: grid, tatreezRaw: rawGray, previewTatreez: previewUrl, thresholdTatreez: t, tatreezPixelSize: 1 };
+      onUpload(locId, { growthFrames: [...growthFrames, newFrame] });
+    } catch (err) {
+      console.error('Growth frame load failed', err);
+    }
+    e.target.value = '';
+  };
+
+  const handleGrowthFrameThreshold = (fi, t) => {
+    const updated = growthFrames.map((f, i) =>
+      i === fi ? { ...f, thresholdTatreez: t, tatreezGrid: applyThreshold(f.tatreezRaw, t) } : f
+    );
+    onUpload(locId, { growthFrames: updated });
+  };
+
+  const handleGrowthFramePixelSize = (fi, ps) => {
+    const updated = growthFrames.map((f, i) => i === fi ? { ...f, tatreezPixelSize: ps } : f);
+    onUpload(locId, { growthFrames: updated });
+  };
+
+  const handleGrowthFrameThickness = (fi, t) => {
+    const updated = growthFrames.map((f, i) => i === fi ? { ...f, tatreezThickness: t } : f);
+    onUpload(locId, { growthFrames: updated });
+  };
+
+  const handleGrowthFrameXOffset = (fi, x) => {
+    const updated = growthFrames.map((f, i) => i === fi ? { ...f, xOffset: x } : f);
+    onUpload(locId, { growthFrames: updated });
+  };
+
+  const handleGrowthFrameInvert = (fi) => {
+    const updated = growthFrames.map((f, i) => i === fi ? { ...f, inverted: !f.inverted } : f);
+    onUpload(locId, { growthFrames: updated });
+  };
+
+  const handleGrowthFrameWidth = (fi, w) => {
+    const updated = growthFrames.map((f, i) => i === fi ? { ...f, frameW: w } : f);
+    onUpload(locId, { growthFrames: updated });
+  };
+
+  const handleRemoveGrowthFrame = (fi) => {
+    onUpload(locId, { growthFrames: growthFrames.filter((_, i) => i !== fi) });
   };
 
   // Moiré layers use grayscale (not dithered binary) so pixel darkness = line width
@@ -133,72 +181,132 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
       {/* Uploads (only when active) */}
       {isActive && (
         <>
-          {/* ── Tree zone: Crown / Branch / Root ── */}
-          <div className="loc-section-title">Tree zones</div>
+          {/* ── Tatreez stitch pattern ── */}
+          {/* Upload one of the numbered tatreez designs. Dark cells become bold
+              stitches aligned to the moiré thread columns — no white background,
+              the moiré shows through void cells as the fabric. */}
+          <div className="loc-section-title">Tatreez</div>
 
-          {[
-            { key: 'crownGrid',  rawKey: 'crownRaw',  previewKey: 'previewCrown',  label: 'Crown' },
-            { key: 'branchGrid', rawKey: 'branchRaw', previewKey: 'previewBranch', label: 'Branch' },
-            { key: 'rootGrid',   rawKey: 'rootRaw',   previewKey: 'previewRoot',   label: 'Root' },
-          ].map(({ key, rawKey, previewKey, label }) => (
-            <div key={key} className="loc-upload-row">
-              <span className="loc-upload-label">{label}</span>
-              <label className={`upload-btn ${data?.[key] ? 'active' : ''}`}>
-                {data?.[key] ? '✓' : '+'}
-                <input type="file" accept="image/*" style={{ display: 'none' }}
-                       onChange={makeFileHandler(key, rawKey, previewKey)} />
-              </label>
-              {data?.[key] && (
-                <button className="clear-btn"
-                        onClick={() => onUpload(locId, { [key]: null, [previewKey]: null })}>×</button>
-              )}
-              {data?.[previewKey] && (
-                <img src={data[previewKey]} className="loc-preview-thumb" alt="" />
-              )}
-            </div>
-          ))}
-
-          {/* Threshold slider — only when at least one zone image exists */}
-          {(data?.crownRaw || data?.branchRaw || data?.rootRaw) && (
-            <div className="loc-width-row">
-              <span className="loc-width-label">Thresh</span>
-              <input type="range" min={5} max={95} step={1}
-                     value={Math.round(threshold * 100)}
-                     onChange={e => handleThresholdChange(Number(e.target.value) / 100)} />
-              <span className="loc-width-val">{Math.round(threshold * 100)}%</span>
-            </div>
-          )}
-
-          {/* Symmetry toggle */}
           <div className="loc-upload-row">
-            <span className="loc-upload-label">Mirror</span>
-            <button
-              className={`upload-btn ${data?.zoneSymmetry ? 'active' : ''}`}
-              onClick={() => onUpload(locId, { zoneSymmetry: !data?.zoneSymmetry })}
-            >
-              {data?.zoneSymmetry ? '⟷ on' : '⟷ off'}
-            </button>
+            <span className="loc-upload-label">Pattern</span>
+            <label className={`upload-btn ${data?.tatreezGrid ? 'active' : ''}`}>
+              {data?.tatreezGrid ? '✓' : '+'}
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                     onChange={handleFileTatreez} />
+            </label>
+            {data?.tatreezGrid && (
+              <button className="clear-btn"
+                      onClick={() => onUpload(locId, { tatreezGrid: null, tatreezRaw: null, previewTatreez: null })}>×</button>
+            )}
+            {data?.previewTatreez && (
+              <img src={data.previewTatreez} className="loc-preview-thumb" alt="" />
+            )}
           </div>
 
-          {/* Zone proportions — Crown / Branch (Root = remainder) */}
-          {(data?.crownGrid || data?.branchGrid || data?.rootGrid) && (
+          {data?.tatreezRaw && (
             <>
               <div className="loc-width-row">
-                <span className="loc-width-label">Crown</span>
-                <input type="range" min={5} max={60} step={5}
-                       value={Math.round((data?.crownFrac ?? 0.30) * 100)}
-                       onChange={e => onUpload(locId, { crownFrac: Number(e.target.value) / 100 })} />
-                <span className="loc-width-val">{Math.round((data?.crownFrac ?? 0.30) * 100)}%</span>
+                <span className="loc-width-label">Thresh</span>
+                <input type="range" min={5} max={95} step={1}
+                       value={Math.round((data?.thresholdTatreez ?? 0.5) * 100)}
+                       onChange={e => handleTatreezThreshold(Number(e.target.value) / 100)} />
+                <span className="loc-width-val">{Math.round((data?.thresholdTatreez ?? 0.5) * 100)}%</span>
               </div>
               <div className="loc-width-row">
-                <span className="loc-width-label">Branch</span>
-                <input type="range" min={5} max={60} step={5}
-                       value={Math.round((data?.branchFrac ?? 0.40) * 100)}
-                       onChange={e => onUpload(locId, { branchFrac: Number(e.target.value) / 100 })} />
-                <span className="loc-width-val">{Math.round((data?.branchFrac ?? 0.40) * 100)}%</span>
+                <span className="loc-width-label">Px size</span>
+                <input type="range" min={0.25} max={12} step={0.25}
+                       value={data?.tatreezPixelSize ?? 1}
+                       onChange={e => onUpload(locId, { tatreezPixelSize: Number(e.target.value) })} />
+                <span className="loc-width-val">{Number(data?.tatreezPixelSize ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>
+              </div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Thickness</span>
+                <input type="range" min={0.1} max={4} step={0.1}
+                       value={data?.tatreezThickness ?? 1}
+                       onChange={e => onUpload(locId, { tatreezThickness: Number(e.target.value) })} />
+                <span className="loc-width-val">{Number(data?.tatreezThickness ?? 1).toFixed(1)}×</span>
               </div>
             </>
           )}
+
+          {/* ── Growth frames ── */}
+          {/* Upload animation frames (01→08) in order. Each appears as a strip
+              below the main band so the tree reads as growing upward. Optional —
+              nothing shows if no frames are uploaded. */}
+          <div className="loc-section-title">
+            Growth frames
+            {growthFrames.length > 0 && (
+              <span className="loc-width-val" style={{ marginLeft: 8, fontWeight: 400 }}>pos</span>
+            )}
+            {growthFrames.length < Math.floor(params.wallHeight / Math.max(20, data?.growthFrameH ?? params.growthFrameH)) && (
+              <label className="upload-btn" style={{ marginLeft: 8, fontSize: 11 }}>
+                + add
+                <input type="file" accept="image/*" style={{ display: 'none' }}
+                       onChange={handleAddGrowthFrame} />
+              </label>
+            )}
+          </div>
+
+          {growthFrames.length > 0 && (
+            <div className="loc-width-row">
+              <span className="loc-width-label">Frame H</span>
+              <input type="range" min={20} max={params.wallHeight} step={5}
+                     value={data?.growthFrameH ?? params.growthFrameH}
+                     onChange={e => onUpload(locId, { growthFrameH: Number(e.target.value) })} />
+              <span className="loc-width-val">{data?.growthFrameH ?? params.growthFrameH}px</span>
+            </div>
+          )}
+
+          {growthFrames.map((frame, fi) => (
+            <div key={fi} className="growth-frame-row">
+              <span className="loc-upload-label">F{fi + 1}</span>
+              {frame.previewTatreez && (
+                <img src={frame.previewTatreez} className="loc-preview-thumb" alt="" />
+              )}
+              <button
+                className={`upload-btn${frame.inverted ? ' active' : ''}`}
+                style={{ fontSize: 8, padding: '2px 6px' }}
+                onClick={() => handleGrowthFrameInvert(fi)}
+              >INV</button>
+              <button className="clear-btn" onClick={() => handleRemoveGrowthFrame(fi)}>×</button>
+              <div className="loc-width-row" style={{ marginTop: 2 }}>
+                <span className="loc-width-label">Position</span>
+                <input type="range"
+                       min={-secW} max={secW} step={5}
+                       value={frame.xOffset ?? 0}
+                       onChange={e => handleGrowthFrameXOffset(fi, Number(e.target.value))} />
+                <span className="loc-width-val">{frame.xOffset ?? 0}px</span>
+              </div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Width</span>
+                <input type="range" min={20} max={secW} step={5}
+                       value={frame.frameW ?? treeW}
+                       onChange={e => handleGrowthFrameWidth(fi, Number(e.target.value))} />
+                <span className="loc-width-val">{frame.frameW ?? treeW}px</span>
+              </div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Thresh</span>
+                <input type="range" min={5} max={95} step={1}
+                       value={Math.round((frame.thresholdTatreez ?? 0.5) * 100)}
+                       onChange={e => handleGrowthFrameThreshold(fi, Number(e.target.value) / 100)} />
+                <span className="loc-width-val">{Math.round((frame.thresholdTatreez ?? 0.5) * 100)}%</span>
+              </div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Px size</span>
+                <input type="range" min={0.25} max={12} step={0.25}
+                       value={frame.tatreezPixelSize ?? 1}
+                       onChange={e => handleGrowthFramePixelSize(fi, Number(e.target.value))} />
+                <span className="loc-width-val">{Number(frame.tatreezPixelSize ?? 1).toFixed(2).replace(/\.?0+$/, '')}×</span>
+              </div>
+              <div className="loc-width-row">
+                <span className="loc-width-label">Thickness</span>
+                <input type="range" min={0.1} max={4} step={0.1}
+                       value={frame.tatreezThickness ?? 1}
+                       onChange={e => handleGrowthFrameThickness(fi, Number(e.target.value))} />
+                <span className="loc-width-val">{Number(frame.tatreezThickness ?? 1).toFixed(1)}×</span>
+              </div>
+            </div>
+          ))}
 
           {/* ── Moiré band images ── */}
           <div className="loc-section-title">Moiré layers</div>
@@ -335,16 +443,18 @@ export default function ControlPanel({
 
             <div className="info-block">
               <div className="info-heading">Tree of Life zone</div>
-              <p>The centre column of each section. The silhouette profile, branch depth, and column density all derive from latitude and longitude.</p>
+              <p>The moiré lines are the embroidery threads — the fabric. Uploading a tatreez pattern stitches bold marks onto those exact thread columns, so the moiré shows through the void cells as the fabric texture.</p>
               <dl>
+                <dt>Tatreez (upload)</dt>
+                <dd>Upload one of the numbered tatreez designs. Black cells become bold stitches aligned to the moiré columns. No white background — the pattern floats on the moiré. Threshold adjusts how many cells become stitches.</dd>
+                <dt>No upload (default)</dt>
+                <dd>Falls back to the coordinate-driven tree: silhouette profile, branch depth, and column density derived from lat/lon. Branch style, motif, and stitch size still apply.</dd>
                 <dt>Branch style: data</dt>
                 <dd>Branch depths follow the same lat/lon wave as the top silhouette — pure coordinate encoding.</dd>
                 <dt>Branch style: tree</dt>
-                <dd>Branches always taper outward from the trunk — latitude controls taper steepness, longitude adds undulating side-branch groupings.</dd>
+                <dd>Branches taper outward from trunk — latitude controls taper steepness, longitude adds undulating side-branch groupings.</dd>
                 <dt>Motif</dt>
-                <dd>Ornamental void pattern (diamond / chevron / star / all) cut into the filled zone as white negative space.</dd>
-                <dt>Crown / Branch / Root</dt>
-                <dd>Upload three images to map into the tree zone's top, middle, and bottom thirds. Threshold and symmetry mirror are adjustable per location.</dd>
+                <dd>Ornamental void pattern (diamond / chevron / star / all) cut into the default tree zone as white negative space.</dd>
               </dl>
             </div>
 
@@ -352,7 +462,7 @@ export default function ControlPanel({
               <div className="info-heading">Coordinate encoding</div>
               <dl>
                 <dt>Longitude →</dt>
-                <dd>Line spacing (frequency), branch column density, horizontal line spacing.</dd>
+                <dd>Line spacing (frequency) and branch column density.</dd>
                 <dt>Latitude →</dt>
                 <dd>Moiré overlay angle, tree silhouette amplitude and peak count, branch taper depth.</dd>
               </dl>
@@ -411,15 +521,6 @@ export default function ControlPanel({
                 onChange={v => set('lineWidth', v)}
                 hint="Thicker = deeper carve in Rhino displacement" />
 
-        <Slider label="Horiz Lines" value={params.horizWeight}
-                min={0} max={1} step={0.05} unit="×"
-                onChange={v => set('horizWeight', v)}
-                hint="Horizontal grid weight — 0 = off, shares vertical frequency per section" />
-
-        <Slider label="Horiz Height" value={params.horizHeight}
-                min={0.05} max={1} step={0.05} unit="×"
-                onChange={v => set('horizHeight', v)}
-                hint="How much of the bottom the horizontal lines fill" />
       </section>
 
       <section className="ctrl-section">
@@ -459,6 +560,10 @@ export default function ControlPanel({
                 min={100} max={600} step={10} unit="px"
                 onChange={v => set('wallHeight', v)}
                 hint="Total height of the pattern band" />
+        <Slider label="Frame Strip H" value={params.growthFrameH}
+                min={40} max={400} step={10} unit="px"
+                onChange={v => set('growthFrameH', v)}
+                hint="Height of each growth frame strip below the main band" />
       </section>
 
       {/* ── Tree of Life ── */}
