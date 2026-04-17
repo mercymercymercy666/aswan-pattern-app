@@ -631,10 +631,13 @@ export default function PatternWall({
 
             if (imgData?.tatreezGrid) {
               if (imgData.stitchLines) {
+                const ps      = Math.max(0.25, imgData.tatreezPixelSize ?? 1);
+                const pitch   = ps <= 1 ? sp.freq * ps : sp.freq;
+                const firstX  = Math.ceil(treeX / pitch) * pitch;
+                const cols    = Math.max(0, Math.floor((treeX + treeW - firstX) / pitch));
                 return (
                   <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
-                    {/* White rect erases background moiré so only variable-width lines show */}
-                    <rect x={treeX} y={0} width={treeW} height={BAND_H} fill="white" />
+                    <rect x={firstX} y={0} width={cols * pitch} height={BAND_H} fill="white" />
                     <TatreezLineLayer
                       rawGrid={imgData.tatreezRaw}
                       grid={imgData.tatreezGrid}
@@ -704,9 +707,13 @@ export default function PatternWall({
                 ? frame.tatreezGrid.map(row => row.map(v => v ? 0 : 1))
                 : frame.tatreezGrid;
               if (frame.stitchLines) {
+                const fps     = Math.max(0.25, frame.tatreezPixelSize ?? 1);
+                const fpitch  = fps <= 1 ? sp.freq * fps : sp.freq;
+                const ffirstX = Math.ceil(gx / fpitch) * fpitch;
+                const fcols   = Math.max(0, Math.floor((gx + frameW - ffirstX) / fpitch));
                 return (
                   <g key={`growth-${id}-${idx}-${fi}`} clipPath={`url(#growthClip-${idx}-${fi})`}>
-                    <rect x={gx} y={Math.max(0, y0)} width={frameW} height={visH} fill="white" />
+                    <rect x={ffirstX} y={Math.max(0, y0)} width={fcols * fpitch} height={visH} fill="white" />
                     <TatreezLineLayer
                       rawGrid={frame.tatreezRaw}
                       grid={grid}
