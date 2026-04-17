@@ -635,9 +635,9 @@ export default function PatternWall({
               const pitch  = ps <= 1 ? sp.freq * ps : sp.freq;
               const firstX = Math.ceil(treeX / pitch) * pitch;
               const cols   = Math.max(0, Math.floor((treeX + treeW - firstX) / pitch));
-              // Erase rect: from first column to right edge of tree zone (avoids thin moiré bleed on right)
-              const eraseX = firstX;
-              const eraseW = treeX + treeW - firstX;
+              // Erase rect: full tree zone — treeClip already confines it, no bleed outside
+              const eraseX = treeX;
+              const eraseW = treeW;
 
               if (imgData.stitchLines) {
                 return (
@@ -715,10 +715,9 @@ export default function PatternWall({
               if (frame.stitchLines) {
                 const fps     = Math.max(0.25, frame.tatreezPixelSize ?? 1);
                 const fpitch  = fps <= 1 ? sp.freq * fps : sp.freq;
-                const ffirstX = Math.ceil(gx / fpitch) * fpitch;
                 return (
                   <g key={`growth-${id}-${idx}-${fi}`} clipPath={`url(#growthClip-${idx}-${fi})`}>
-                    <rect x={ffirstX} y={Math.max(0, y0)} width={gx + frameW - ffirstX} height={visH} fill="white" />
+                    <rect x={gx} y={Math.max(0, y0)} width={frameW} height={visH} fill="white" />
                     <TatreezLineLayer
                       rawGrid={frame.tatreezRaw}
                       grid={grid}
