@@ -90,6 +90,11 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
     onUpload(locId, { growthFrames: updated });
   };
 
+  const handleGrowthFrameDir = (fi, horiz) => {
+    const updated = growthFrames.map((f, i) => i === fi ? { ...f, stitchHorizontal: horiz } : f);
+    onUpload(locId, { growthFrames: updated });
+  };
+
   const handleGrowthFrameWidth = (fi, w) => {
     const updated = growthFrames.map((f, i) => i === fi ? { ...f, frameW: w } : f);
     onUpload(locId, { growthFrames: updated });
@@ -225,6 +230,15 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
                        onChange={e => onUpload(locId, { tatreezThickness: Number(e.target.value) })} />
                 <span className="loc-width-val">{Number(data?.tatreezThickness ?? 1).toFixed(1)}×</span>
               </div>
+              <div className="loc-upload-row">
+                <span className="loc-upload-label">Dir</span>
+                <button
+                  className={`upload-btn${!(data?.stitchHorizontal) ? ' active' : ''}`}
+                  onClick={() => onUpload(locId, { stitchHorizontal: false })}>V</button>
+                <button
+                  className={`upload-btn${data?.stitchHorizontal ? ' active' : ''}`}
+                  onClick={() => onUpload(locId, { stitchHorizontal: true })}>H</button>
+              </div>
             </>
           )}
 
@@ -267,6 +281,16 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
                 style={{ fontSize: 8, padding: '2px 6px' }}
                 onClick={() => handleGrowthFrameInvert(fi)}
               >INV</button>
+              <button
+                className={`upload-btn${!(frame.stitchHorizontal) ? ' active' : ''}`}
+                style={{ fontSize: 8, padding: '2px 6px' }}
+                onClick={() => handleGrowthFrameDir(fi, false)}
+              >V</button>
+              <button
+                className={`upload-btn${frame.stitchHorizontal ? ' active' : ''}`}
+                style={{ fontSize: 8, padding: '2px 6px' }}
+                onClick={() => handleGrowthFrameDir(fi, true)}
+              >H</button>
               <button className="clear-btn" onClick={() => handleRemoveGrowthFrame(fi)}>×</button>
               <div className="loc-width-row" style={{ marginTop: 2 }}>
                 <span className="loc-width-label">Position</span>

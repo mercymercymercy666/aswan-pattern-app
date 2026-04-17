@@ -117,15 +117,12 @@ function EraseLineLayer({ grayGrid, x0, secW, bandH, lineSpacing, threshold }) {
 //   = 1  : stitches exactly on moiré columns (default)
 //   > 1  : stitches on moiré columns, but each image pixel covers ps×ps stitches
 //        — chunky pixel-art / classic tatreez block look
-function TatreezStitchLayer({ grid, treeX, treeW, bandH, freq, lineWidth, pixelSize = 1, yOffset = 0, thickness = 1 }) {
+function TatreezStitchLayer({ grid, treeX, treeW, bandH, freq, lineWidth, pixelSize = 1, yOffset = 0, thickness = 1, horizontal = false }) {
   if (!grid?.length) return null;
-  const ps     = Math.max(0.25, pixelSize);
-  // Stitch pitch: sub-moiré when ps<1, moiré-aligned when ps>=1
-  const pitch  = ps <= 1 ? freq * ps : freq;
-  // Coarse block size (only meaningful when ps>1)
-  const block  = ps > 1 ? Math.max(1, Math.round(ps)) : 1;
+  const ps    = Math.max(0.25, pixelSize);
+  const pitch = ps <= 1 ? freq * ps : freq;
+  const block = ps > 1 ? Math.max(1, Math.round(ps)) : 1;
 
-  // Stitch grid origin aligned to pitch
   const firstX = Math.ceil(treeX / pitch) * pitch;
   const cols   = Math.max(0, Math.floor((treeX + treeW - firstX) / pitch));
   const rows   = Math.floor(bandH / pitch);
@@ -133,39 +130,53 @@ function TatreezStitchLayer({ grid, treeX, treeW, bandH, freq, lineWidth, pixelS
   const gCols  = grid[0]?.length ?? 0;
   if (!gRows || !gCols || cols <= 0 || rows <= 0) return null;
 
-  // Pattern resolution: how many distinct image samples across/down
   const patCols = Math.max(1, Math.ceil(cols / block));
   const patRows = Math.max(1, Math.ceil(rows / block));
-
-  // Stroke width scales with pitch so stitches fill their cell at any density
-  const baseW    = Math.max(lineWidth * 2.8, pitch * 0.55) * thickness;
-  const fadeZone = Math.max(1, Math.round(cols * 0.20));
-  const gap      = pitch * 0.06;
+  const baseW   = Math.max(lineWidth * 2.8, pitch * 0.55) * thickness;
+  const gap     = pitch * 0.06;
 
   const buckets = {};
-  const addSeg  = (sw, sx, y1, y2) => {
+  const addSeg = (sw, x1, y1, x2, y2) => {
     const key = sw.toFixed(2);
     buckets[key] = (buckets[key] ?? '') +
-      `M${sx.toFixed(1)},${y1.toFixed(1)}L${sx.toFixed(1)},${y2.toFixed(1)}`;
+      `M${x1.toFixed(1)},${y1.toFixed(1)}L${x2.toFixed(1)},${y2.toFixed(1)}`;
   };
 
-  for (let ri = 0; ri < rows; ri++) {
-    const pr = Math.floor(ri / block);
-    const gr = Math.min(gRows - 1, Math.floor((pr + 0.5) / patRows * gRows));
-    for (let ci = 0; ci < cols; ci++) {
-      const pc = Math.floor(ci / block);
-      const gc = Math.min(gCols - 1, Math.floor((pc + 0.5) / patCols * gCols));
-      if (!grid[gr][gc]) continue;
-
-      const distFromEdge = Math.min(ci, cols - 1 - ci);
-      const fade = distFromEdge >= fadeZone
-        ? 1
-        : Math.pow(distFromEdge / fadeZone, 1.5);
+  if (horizontal) {
+    // Horizontal weft stitches — fade top/bottom edges of the zone
+    const fadeZone = Math.max(1, Math.round(rows * 0.20));
+    for (let ri = 0; ri < rows; ri++) {
+      const pr = Math.floor(ri / block);
+      const gr = Math.min(gRows - 1, Math.floor((pr + 0.5) / patRows * gRows));
+      const distFromEdge = Math.min(ri, rows - 1 - ri);
+      const fade = distFromEdge >= fadeZone ? 1 : Math.pow(distFromEdge / fadeZone, 1.5);
       if (fade < 0.05) continue;
-
       const sw = lineWidth + (baseW - lineWidth) * fade;
-      const sx = firstX + ci * pitch;
-      addSeg(sw, sx, yOffset + ri * pitch + gap, yOffset + (ri + 1) * pitch - gap);
+      const sy = yOffset + ri * pitch;
+      for (let ci = 0; ci < cols; ci++) {
+        const pc = Math.floor(ci / block);
+        const gc = Math.min(gCols - 1, Math.floor((pc + 0.5) / patCols * gCols));
+        if (!grid[gr][gc]) continue;
+        addSeg(sw, firstX + ci * pitch + gap, sy, firstX + (ci + 1) * pitch - gap, sy);
+      }
+    }
+  } else {
+    // Vertical warp stitches — fade left/right edges of the zone
+    const fadeZone = Math.max(1, Math.round(cols * 0.20));
+    for (let ri = 0; ri < rows; ri++) {
+      const pr = Math.floor(ri / block);
+      const gr = Math.min(gRows - 1, Math.floor((pr + 0.5) / patRows * gRows));
+      for (let ci = 0; ci < cols; ci++) {
+        const pc = Math.floor(ci / block);
+        const gc = Math.min(gCols - 1, Math.floor((pc + 0.5) / patCols * gCols));
+        if (!grid[gr][gc]) continue;
+        const distFromEdge = Math.min(ci, cols - 1 - ci);
+        const fade = distFromEdge >= fadeZone ? 1 : Math.pow(distFromEdge / fadeZone, 1.5);
+        if (fade < 0.05) continue;
+        const sw = lineWidth + (baseW - lineWidth) * fade;
+        const sx = firstX + ci * pitch;
+        addSeg(sw, sx, yOffset + ri * pitch + gap, sx, yOffset + (ri + 1) * pitch - gap);
+      }
     }
   }
 
@@ -467,7 +478,8 @@ export default function PatternWall({
                     treeX={treeX} treeW={treeW} bandH={BAND_H}
                     freq={sp.freq} lineWidth={sp.lineWidth}
                     pixelSize={imgData.tatreezPixelSize ?? 1}
-                    thickness={imgData.tatreezThickness ?? 1} />
+                    thickness={imgData.tatreezThickness ?? 1}
+                    horizontal={imgData.stitchHorizontal ?? false} />
                 </g>
               );
             }
@@ -526,7 +538,8 @@ export default function PatternWall({
                     freq={sp.freq} lineWidth={sp.lineWidth}
                     pixelSize={frame.tatreezPixelSize ?? 1}
                     thickness={frame.tatreezThickness ?? 1}
-                    yOffset={Math.max(0, y0)} />
+                    yOffset={Math.max(0, y0)}
+                    horizontal={frame.stitchHorizontal ?? false} />
                 </g>
               );
             });
