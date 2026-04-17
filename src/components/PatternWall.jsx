@@ -653,10 +653,9 @@ export default function PatternWall({
                   </g>
                 );
               }
-              // V / H stitch mode — erase background so stitches are visible on white
+              // V / H stitch mode — no background erase, moiré shows through
               return (
                 <g key={`tree-${id}-${idx}`} clipPath={`url(#treeClip-${idx})`}>
-                  <rect x={eraseX} y={0} width={eraseW} height={BAND_H} fill="white" />
                   <TatreezStitchLayer
                     grid={imgData.tatreezGrid}
                     treeX={treeX} treeW={treeW} bandH={BAND_H}
