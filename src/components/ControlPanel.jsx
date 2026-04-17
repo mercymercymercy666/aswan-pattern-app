@@ -434,13 +434,11 @@ function LocationCard({ locId, isActive, locationData, params, sectionWidths, tr
             {growthFrames.length > 0 && (
               <span className="loc-width-val" style={{ marginLeft: 8, fontWeight: 400 }}>pos</span>
             )}
-            {growthFrames.length < Math.floor(params.wallHeight / Math.max(20, data?.growthFrameH ?? params.growthFrameH)) && (
-              <label className="upload-btn" style={{ marginLeft: 8, fontSize: 11 }}>
-                + add
-                <input type="file" accept="image/*" style={{ display: 'none' }}
-                       onChange={handleAddGrowthFrame} />
-              </label>
-            )}
+            <label className="upload-btn" style={{ marginLeft: 8, fontSize: 11 }}>
+              + add
+              <input type="file" accept="image/*" style={{ display: 'none' }}
+                     onChange={handleAddGrowthFrame} />
+            </label>
           </div>
 
           {growthFrames.length > 0 && (
